@@ -54,12 +54,13 @@ else:
     dict_parties = {}
 
 # ---------------------------------------------------------
-# Interface Utilisateur : Onglets
+# Interface Utilisateur : Navigation
 # ---------------------------------------------------------
-onglet_grille, onglet_stats, onglet_gestion = st.tabs([" Grille de Match", "📊 Journal & Stats", "⚙️ Gestion"])
+st.sidebar.title("Navigation")
+choix_menu = st.sidebar.radio("Aller vers :", ["⚾ Grille de Match", "📊 Journal & Stats", "⚙️ Gestion"])
 
 # --- ONGLET 1 : GRILLE DE MATCH (MATRICE) ---
-with onglet_grille:
+if choix_menu == "⚾ Grille de Match":
     st.header("Feuille de match interactive")
     
     if not dict_joueurs or not dict_parties:
@@ -218,7 +219,7 @@ with onglet_grille:
                 st.info("ℹ️ Aucune modification détectée.")
 
 # --- ONGLET 2 : STATISTIQUES ET JOURNAL ---
-with onglet_stats:
+elif choix_menu == "📊 Journal & Stats":
     st.header("Journal des matchs")
     
     # Légende des codes dans un menu déroulant
@@ -427,7 +428,7 @@ with onglet_stats:
         st.info("Aucune donnée enregistrée pour le moment. Allez à l'onglet Saisie pour enregistrer votre premier match !")
 
 # --- ONGLET 3 : GESTION (AJOUT DE JOUEURS ET MATCHS) ---
-with onglet_gestion:
+elif choix_menu == "⚙️ Gestion":
     st.header("Gestion de l'équipe et des matchs")
     
     col_g1, col_g2 = st.columns(2)
