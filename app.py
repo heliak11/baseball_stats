@@ -437,7 +437,7 @@ with onglet_gestion:
     # -------------------------------------
     with col_g1:
         st.subheader("👤 Joueurs")
-        tab_ajout_j, tab_modif_j = st.tabs(["Ajouter", "Modifier"])
+        tab_ajout_j, tab_modif_j, tab_suppr_j = st.tabs(["Ajouter", "Modifier", "Supprimer"])
         
         with tab_ajout_j:
             with st.form("form_ajout_joueur", clear_on_submit=True):
@@ -492,13 +492,35 @@ with onglet_gestion:
                             st.rerun()
                         else:
                             st.error("⚠️ Veuillez remplir au moins le prénom et le nom.")
+                            
+        with tab_suppr_j:
+            if not dict_joueurs:
+                st.info("Aucun joueur à supprimer.")
+            else:
+                joueur_a_supprimer = st.selectbox("Sélectionner un joueur à supprimer", list(dict_joueurs.keys()), key="select_suppr_j")
+                j_id = dict_joueurs[joueur_a_supprimer]
+                
+                with st.form("form_suppr_joueur"):
+                    st.warning("⚠️ Attention, cette suppression est irréversible.")
+                    soumis_suppr_j = st.form_submit_button("Supprimer ce joueur")
+                    
+                    if soumis_suppr_j:
+                        with st.spinner("Suppression du joueur..."):
+                            ws_joueurs = sh.worksheet("joueurs")
+                            row_idx = int(joueurs_df.index[joueurs_df['id'] == j_id].tolist()[0] + 2)
+                            ws_joueurs.delete_rows(row_idx)
+                            
+                        charger_donnees.clear()
+                        st.success("✅ Joueur supprimé avec succès !")
+                        time.sleep(1)
+                        st.rerun()
                     
     # -------------------------------------
     # GESTION DES MATCHS
     # -------------------------------------
     with col_g2:
         st.subheader("🏟️ Matchs")
-        tab_ajout_m, tab_modif_m = st.tabs(["Ajouter", "Modifier"])
+        tab_ajout_m, tab_modif_m, tab_suppr_m = st.tabs(["Ajouter", "Modifier", "Supprimer"])
         
         with tab_ajout_m:
             with st.form("form_ajout_match", clear_on_submit=True):
@@ -565,3 +587,25 @@ with onglet_gestion:
                             st.rerun()
                         else:
                             st.error("⚠️ Veuillez indiquer l'équipe adverse.") 
+                            
+        with tab_suppr_m:
+            if not dict_parties:
+                st.info("Aucun match à supprimer.")
+            else:
+                match_a_supprimer = st.selectbox("Sélectionner un match à supprimer", list(dict_parties.keys()), key="select_suppr_m")
+                m_id = dict_parties[match_a_supprimer]
+                
+                with st.form("form_suppr_match"):
+                    st.warning("⚠️ Attention, cette suppression est irréversible.")
+                    soumis_suppr_m = st.form_submit_button("Supprimer ce match")
+                    
+                    if soumis_suppr_m:
+                        with st.spinner("Suppression du match..."):
+                            ws_parties = sh.worksheet("parties")
+                            row_idx = int(parties_df.index[parties_df['id'] == m_id].tolist()[0] + 2)
+                            ws_parties.delete_rows(row_idx)
+                            
+                        charger_donnees.clear()
+                        st.success("✅ Match supprimé avec succès !")
+                        time.sleep(1)
+                        st.rerun()
