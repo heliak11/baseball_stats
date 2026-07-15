@@ -442,9 +442,28 @@ elif choix_menu == "📊 Journal & Stats":
     
     afficher_legende()
     
-    if not presences_df.empty and not joueurs_df.empty:
+    if not presences_df.empty and not joueurs_df.empty and not parties_df.empty:
+        st.subheader("🔍 Filtres")
+        types_p = parties_df['type_match'].dropna().astype(str).unique()
+        types_disponibles = ["Tous les matchs"] + sorted([t for t in types_p if t.strip() != ""])
+        filtre_type = st.selectbox("Filtrer par type de match :", types_disponibles)
+        
         # Fusion Pandas pour remplacer la requête SQL
         df_merged = pd.merge(presences_df, joueurs_df, left_on='joueur_id', right_on='id')
+        
+        # Ajout du type de match pour le filtre
+        df_merged['partie_id_str'] = df_merged['partie_id'].astype(str)
+        parties_df_safe = parties_df.copy()
+        parties_df_safe['id_str'] = parties_df_safe['id'].astype(str)
+        df_merged = pd.merge(df_merged, parties_df_safe[['id_str', 'type_match']], left_on='partie_id_str', right_on='id_str', how='left')
+        
+        if filtre_type != "Tous les matchs":
+            df_merged = df_merged[df_merged['type_match'] == filtre_type]
+            
+        if df_merged.empty:
+            st.info(f"ℹ️ Aucune donnée enregistrée pour les matchs de type : {filtre_type}.")
+            st.stop() # Arrête le traitement de cet onglet pour éviter les erreurs
+            
         df_merged['Joueur'] = df_merged['prenom'].astype(str) + " " + df_merged['nom'].astype(str)
         
         df_presences = df_merged[['Joueur', 'code_resultat', 'point_marque', 'points_produits', 'buts_voles']].rename(
