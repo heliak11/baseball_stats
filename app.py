@@ -883,35 +883,9 @@ elif choix_menu == "⚙️ Gestion":
                     df_import.columns = df_import.columns.str.strip()
                     df_import = df_import.fillna(0)
                     
-                    # 2. Récupération des données existantes
-                    ws_joueurs = sh.worksheet("joueurs")
-                    ws_parties = sh.worksheet("parties")
-                    
-                    joueurs_existants = ws_joueurs.get_all_records()
-                    parties_existantes = ws_parties.get_all_records()
-                    
-                    # Dictionnaires pour l'importation
-                    # Pour les joueurs, on cherche par nom complet
-                    dict_j_import = {f"{str(j.get('prenom', ''))} {str(j.get('nom', ''))}".strip(): j['id'] for j in joueurs_existants}
-                    # Pour les parties, on peut chercher par ID ou par nom
-                    dict_p_by_id = {str(p.get('id', '')): str(p.get('id', '')) for p in parties_existantes}
-                    dict_p_by_name = {str(p.get('equipe_adverse', '')).strip(): p['id'] for p in parties_existantes}
-                    dict_j_exact = {f"{str(j.get('prenom', ''))} {str(j.get('nom', ''))}".strip().lower(): j['id'] for j in joueurs_existants}
-                    # 2. Récupération des données existantes (DataFrames)
+                    # 2. Récupération des données existantes (Depuis le cache local)
                     dict_j_exact = {}
                     dict_j_initial = {}
-                    for j in joueurs_existants:
-                        p = str(j.get('prenom', '')).strip()
-                        n = str(j.get('nom', '')).strip()
-                        if p and n:
-                            dict_j_initial[f"{p[0]} {n}".lower()] = j['id']
-                    
-                    prochain_id_joueur = len(ws_joueurs.get_all_values())
-                    prochain_id_partie = len(ws_parties.get_all_values())
-                    prochain_id_presence = len(ws_presences.get_all_values())
-                    dict_p_by_id = {str(p.get('id', '')).strip().lower(): str(p.get('id', '')) for p in parties_existantes}
-                    dict_p_by_name = {str(p.get('equipe_adverse', '')).strip().lower(): p['id'] for p in parties_existantes}
-                    
                     if not joueurs_df.empty:
                         for _, j in joueurs_df.iterrows():
                             p = str(j.get('prenom', '')).strip()
@@ -948,7 +922,6 @@ elif choix_menu == "⚙️ Gestion":
                         'SAC': 'SAC', 'E/OPT': 'E', 'BB': 'BB', 'FA': 'FA'
                     }
                     
-                    # 3. Traitement des lignes
                     # 3. Validation des lignes
                     for index, row in df_import.iterrows():
                         if 'joueur' not in row or 'Partie' not in row:
@@ -960,14 +933,6 @@ elif choix_menu == "⚙️ Gestion":
                         if not nom_joueur_brut or not nom_partie_brut or nom_joueur_brut == '0' or nom_partie_brut == '0' or nom_joueur_brut.lower() == 'nan':
                             continue
                             
-                        # Joueur
-                        if nom_joueur_brut not in dict_j_import:
-                            parts = nom_joueur_brut.split(' ', 1)
-                            prenom = parts[0]
-                            nom = parts[1] if len(parts) > 1 else ""
-                            ws_joueurs.append_row([prochain_id_joueur, prenom, nom, 0])
-                            dict_j_import[nom_joueur_brut] = prochain_id_joueur
-                            prochain_id_joueur += 1
                         # Validation Joueur
                         joueur_key = nom_joueur_brut.lower()
                         joueur_id = None
@@ -978,47 +943,18 @@ elif choix_menu == "⚙️ Gestion":
                         else:
                             erreurs_joueurs.add(nom_joueur_brut)
                             
-                        joueur_id = dict_j_import[nom_joueur_brut]
-                        
-                        # Partie (Logique améliorée)
                         # Validation Partie
                         partie_id = None
-                        # 1. On cherche si la valeur est un ID de partie existant
-                        if nom_partie_brut in dict_p_by_id:
-                            partie_id = dict_p_by_id[nom_partie_brut]
-                        # 2. Sinon, on cherche si c'est un nom de partie existant
-                        elif nom_partie_brut in dict_p_by_name:
-                            partie_id = dict_p_by_name[nom_partie_brut]
-                        # 3. Sinon, on crée une nouvelle partie
                         partie_key = nom_partie_brut.lower()
                         if partie_key in dict_p_by_id:
                             partie_id = dict_p_by_id[partie_key]
                         elif partie_key in dict_p_by_name:
                             partie_id = dict_p_by_name[partie_key]
                         else:
-                            date_str = str(row.get('Date', '')).strip()
-                            try:
-                                if date_str and date_str != '0':
-                                    date_formatee = datetime.datetime.strptime(date_str, "%d-%b-%y").strftime("%Y-%m-%d")
-                                else:
-                                    date_formatee = datetime.date.today().strftime("%Y-%m-%d")
-                            except Exception:
-                                date_formatee = date_str if date_str and date_str != '0' else datetime.date.today().strftime("%Y-%m-%d")
                             erreurs_parties.add(nom_partie_brut)
                             
-                            partie_id = f"P{prochain_id_partie}"
-                            ws_parties.append_row([partie_id, date_formatee, nom_partie_brut, "À déterminer", "Saison régulière", "À venir", ""])
                         if joueur_id and partie_id:
                             lignes_valides.append((joueur_id, partie_id, row))
-                            
-                            # On met à jour nos dictionnaires pour les prochaines lignes du même fichier
-                            dict_p_by_id[partie_id] = partie_id
-                            dict_p_by_name[nom_partie_brut] = partie_id
-                            prochain_id_partie += 1
-                                
-                        # Statistiques
-                        vols = int(float(row['BV'])) if 'BV' in row and str(row['BV']).replace('.','',1).isdigit() else 0
-                        points = int(float(row['RUN'])) if 'RUN' in row and str(row['RUN']).replace('.','',1).isdigit() else 0
 
                     if erreurs_joueurs or erreurs_parties:
                         if erreurs_joueurs:
