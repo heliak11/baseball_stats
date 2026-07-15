@@ -982,3 +982,24 @@ elif choix_menu == "⚙️ Gestion":
                         
                 except Exception as e:
                     st.error(f"❌ Une erreur s'est produite durant l'importation : {e}")
+
+    # -------------------------------------
+    # ZONE DE DANGER (RÉINITIALISATION)
+    # -------------------------------------
+    st.divider()
+    st.subheader("🚨 Zone de Danger")
+    with st.expander("Réinitialiser les présences au bâton"):
+        st.warning("⚠️ **ATTENTION !** Cette action supprimera **TOUTES** les présences au bâton (les statistiques offensives) enregistrées dans l'application. Les joueurs, les matchs et les données défensives seront conservés. Cette action est **irréversible**.")
+        confirmation = st.text_input("Tapez 'SUPPRIMER' pour confirmer l'action :")
+        if st.button("🗑️ Effacer toutes les présences", type="primary"):
+            if confirmation == "SUPPRIMER":
+                with st.spinner("Suppression des présences en cours..."):
+                    nb_lignes = len(ws_presences.get_all_values())
+                    if nb_lignes > 1:
+                        ws_presences.delete_rows(2, nb_lignes)
+                    charger_donnees.clear()
+                    st.success("✅ Toutes les présences ont été supprimées avec succès !")
+                    time.sleep(2)
+                    st.rerun()
+            else:
+                st.error("❌ Action annulée : Veuillez taper 'SUPPRIMER' en majuscules pour confirmer.")
