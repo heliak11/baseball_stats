@@ -921,7 +921,6 @@ elif choix_menu == "⚙️ Gestion":
                         nom_joueur_brut = str(row['joueur']).strip()
                         nom_partie_brut = str(row['Partie']).strip()
                         
-                        if not nom_joueur_brut or not nom_partie_brut or nom_joueur_brut == '0' or nom_partie_brut == '0':
                         if not nom_joueur_brut or not nom_partie_brut or nom_joueur_brut == '0' or nom_partie_brut == '0' or nom_joueur_brut.lower() == 'nan':
                             continue
                             
