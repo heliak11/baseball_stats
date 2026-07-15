@@ -93,14 +93,18 @@ def afficher_legende():
         st.markdown("""
         | Code | Signification | Est un Coup Sûr (H) ? | Est une Présence Officielle (AB) ? |
         | :--- | :--- | :--- | :--- |
-        | **S** | Simple |  Oui |  Oui |
-        | **D** | Double |  Oui |  Oui |
-        | **T** | Triple |  Oui |  Oui |
+        | **1B** | Simple (Single) |  Oui |  Oui |
+        | **2B** | Double |  Oui |  Oui |
+        | **3B** | Triple |  Oui |  Oui |
         | **CC** | Coup de circuit |  Oui |  Oui |
         | **BB** | But sur balles | ❌ Non | ❌ Non |
         | **FA** | Frappé par l'aligneur (Atteint) | ❌ Non | ❌ Non |
-        | **K / ꓘ** | Retrait sur des prises | ❌ Non |  Oui |
-        | **6-3 / F8 (etc.)** | Retrait défensif | ❌ Non |  Oui |
+        | **SAC** | Amorti Sacrifice / Ballon Sacrifice | ❌ Non | ❌ Non |
+        | **KE** | Retrait sur prises (sans élan / regardé) | ❌ Non |  Oui |
+        | **KD** | Retrait sur prises (sur élan) | ❌ Non |  Oui |
+        | **E / FC** | Atteint sur Erreur / Choix Défensif | ❌ Non |  Oui |
+        | **GO** | Roulant (Ground Out) | ❌ Non |  Oui |
+        | **FO** | Ballon (Fly Out) | ❌ Non |  Oui |
         """)
         st.caption("📌 **Rappel des positions :** 1=Lanceur (P), 2=Receveur (C), 3=1er but (1B), 4=2e but (2B), 5=3e but (3B), 6=Arrêt-court (SS), 7=Champ gauche (LF), 8=Champ centre (CF), 9=Champ droit (RF), DH=Frappeur de choix, B=Banc.")
         
@@ -193,15 +197,16 @@ if choix_menu == "⚾ Grille de Match":
                             pass
                 
             # 3. Configurer les colonnes pour avoir des menus déroulants
-            options_codes = ["", "S", "D", "T", "CC", "BB", "FA", "K", "6-3", "F8"]
+            # Options offensives avec KE (Regardé), KD (Élan), GO (Roulant) et FO (Ballon)
+            options_codes = ["", "1B", "2B", "3B", "CC", "BB", "FA", "SAC", "KE", "KD", "E", "FC", "GO", "FO"]
             col_config = {"Joueur": st.column_config.Column(disabled=True)}
             for i in range(1, 10):
                 col_config[f"M{i}"] = st.column_config.SelectboxColumn(label=str(i), options=options_codes, width="small")
                 
             # Configuration des nouvelles colonnes
-            col_config["Points"] = st.column_config.NumberColumn(label="Points (R)", min_value=0, step=1, width="small")
-            col_config["RBI"] = st.column_config.NumberColumn(label="Produits (RBI)", min_value=0, step=1, width="small")
-            col_config["Vols"] = st.column_config.NumberColumn(label="Volés (SB)", min_value=0, step=1, width="small")
+            col_config["Points"] = st.column_config.NumberColumn(label="RUN (Points)", min_value=0, step=1, width="small")
+            col_config["RBI"] = st.column_config.NumberColumn(label="PP (RBI)", min_value=0, step=1, width="small")
+            col_config["Vols"] = st.column_config.NumberColumn(label="BV (Vols)", min_value=0, step=1, width="small")
 
             # 4. Afficher la grille éditable
             grille_editee = st.data_editor(df_grille, column_config=col_config, hide_index=True, use_container_width=True, key="grille_off")
@@ -451,34 +456,42 @@ elif choix_menu == "📊 Journal & Stats":
         # ---------------------------------------------------------
         
         # 1. Créer des colonnes temporaires pour catégoriser les actions
-        df_presences['Est_S'] = (df_presences['Action'] == 'S').astype(int)
-        df_presences['Est_D'] = (df_presences['Action'] == 'D').astype(int)
-        df_presences['Est_T'] = (df_presences['Action'] == 'T').astype(int)
+        df_presences['Est_1B'] = (df_presences['Action'] == '1B').astype(int)
+        df_presences['Est_2B'] = (df_presences['Action'] == '2B').astype(int)
+        df_presences['Est_3B'] = (df_presences['Action'] == '3B').astype(int)
         df_presences['Est_CC'] = (df_presences['Action'] == 'CC').astype(int)
         df_presences['Est_BB'] = (df_presences['Action'] == 'BB').astype(int)
         df_presences['Est_FA'] = (df_presences['Action'] == 'FA').astype(int)
+        df_presences['Est_KE'] = (df_presences['Action'] == 'KE').astype(int)
+        df_presences['Est_KD'] = (df_presences['Action'] == 'KD').astype(int)
         
-        df_presences['Est_H'] = df_presences['Est_S'] + df_presences['Est_D'] + df_presences['Est_T'] + df_presences['Est_CC']
+        df_presences['Est_H'] = df_presences['Est_1B'] + df_presences['Est_2B'] + df_presences['Est_3B'] + df_presences['Est_CC']
         # Assure qu'une présence avec un Action vide (ex: pinch runner avec vols/points) ne compte pas comme un At-Bat officiel (AB)
         df_presences['Est_AB'] = (~df_presences['Action'].isin(['BB', 'FA', ''])).astype(int)
+        # Un AB est une présence au marbre qui ne se termine PAS par un BB, FA, ou un sacrifice.
+        df_presences['Est_AB'] = (~df_presences['Action'].isin(['BB', 'FA', 'SAC', ''])).astype(int)
         
         # 2. Grouper par joueur et faire les totaux
         stats_joueurs = df_presences.groupby('Joueur').agg(
             PA=('Action', 'count'), # Présences au marbre totales
             AB=('Est_AB', 'sum'),
             H=('Est_H', 'sum'),
-            S=('Est_S', 'sum'),
-            D=('Est_D', 'sum'),
-            T=('Est_T', 'sum'),
+            S=('Est_1B', 'sum'), # S pour Single, utilisé dans le calcul de TB
+            D=('Est_2B', 'sum'), # D pour Double
+            T=('Est_3B', 'sum'), # T pour Triple
             CC=('Est_CC', 'sum'),
             BB=('Est_BB', 'sum'),
             FA=('Est_FA', 'sum'),
+            KE=('Est_KE', 'sum'),
+            KD=('Est_KD', 'sum'),
             Points=('Points', 'sum'),
             RBI=('RBI', 'sum'),
             Buts_Voles=('Vols', 'sum')
         ).reset_index()
         
         # 3. Calculer les statistiques avancées
+        stats_joueurs['K'] = stats_joueurs['KE'] + stats_joueurs['KD']
+        
         # TB : Total des buts (Total Bases)
         stats_joueurs['TB'] = stats_joueurs['S'] + (2 * stats_joueurs['D']) + (3 * stats_joueurs['T']) + (4 * stats_joueurs['CC'])
         
@@ -536,7 +549,8 @@ elif choix_menu == "📊 Journal & Stats":
             'Points produits (RBI)': 'RBI',
             'Points marqués (R)': 'Points',
             'Buts volés (SB)': 'Buts_Voles',
-            'Coups de circuit (HR)': 'CC'
+            'Coups de circuit (HR)': 'CC',
+            'Retraits sur prises (K)': 'K'
         }
         
         stat_label = st.selectbox("Sélectionnez une statistique pour le graphique et le classement :", list(metrics_dispo.keys()))
@@ -553,7 +567,7 @@ elif choix_menu == "📊 Journal & Stats":
         
         # On renomme et ordonne les colonnes pour l'affichage final
         df_affichage_stats = stats_joueurs[[
-            'Joueur', 'PA', 'AB', 'Points', 'H', 'D', 'T', 'CC', 'RBI', 'BB', 'Buts_Voles',
+            'Joueur', 'PA', 'AB', 'Points', 'H', 'D', 'T', 'CC', 'RBI', 'BB', 'K', 'KE', 'KD', 'Buts_Voles',
             'AVG_Format', 'OBP_Format', 'SLG_Format', 'OPS_Format'
         ]].rename(
             columns={
@@ -566,6 +580,9 @@ elif choix_menu == "📊 Journal & Stats":
                 'CC': 'HR',
                 'RBI': 'RBI',
                 'BB': 'BB',
+                'K': 'K',
+                'KE': 'KE',
+                'KD': 'KD',
                 'Buts_Voles': 'SB',
                 'AVG_Format': 'AVG',
                 'OBP_Format': 'OBP',
