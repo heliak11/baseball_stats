@@ -882,8 +882,12 @@ elif choix_menu == "⚙️ Gestion":
                     joueurs_existants = ws_joueurs.get_all_records()
                     parties_existantes = ws_parties.get_all_records()
                     
+                    # Dictionnaires pour l'importation
+                    # Pour les joueurs, on cherche par nom complet
                     dict_j_import = {f"{str(j.get('prenom', ''))} {str(j.get('nom', ''))}".strip(): j['id'] for j in joueurs_existants}
-                    dict_p_import = {str(p.get('equipe_adverse', '')).strip(): p['id'] for p in parties_existantes}
+                    # Pour les parties, on peut chercher par ID ou par nom
+                    dict_p_by_id = {str(p.get('id', '')): str(p.get('id', '')) for p in parties_existantes}
+                    dict_p_by_name = {str(p.get('equipe_adverse', '')).strip(): p['id'] for p in parties_existantes}
                     
                     prochain_id_joueur = len(ws_joueurs.get_all_values())
                     prochain_id_partie = len(ws_parties.get_all_values())
@@ -919,8 +923,16 @@ elif choix_menu == "⚙️ Gestion":
                             
                         joueur_id = dict_j_import[nom_joueur_brut]
                         
-                        # Partie
-                        if nom_partie_brut not in dict_p_import:
+                        # Partie (Logique améliorée)
+                        partie_id = None
+                        # 1. On cherche si la valeur est un ID de partie existant
+                        if nom_partie_brut in dict_p_by_id:
+                            partie_id = dict_p_by_id[nom_partie_brut]
+                        # 2. Sinon, on cherche si c'est un nom de partie existant
+                        elif nom_partie_brut in dict_p_by_name:
+                            partie_id = dict_p_by_name[nom_partie_brut]
+                        # 3. Sinon, on crée une nouvelle partie
+                        else:
                             date_str = str(row.get('Date', '')).strip()
                             try:
                                 if date_str and date_str != '0':
@@ -929,13 +941,15 @@ elif choix_menu == "⚙️ Gestion":
                                     date_formatee = datetime.date.today().strftime("%Y-%m-%d")
                             except Exception:
                                 date_formatee = date_str if date_str and date_str != '0' else datetime.date.today().strftime("%Y-%m-%d")
-                                
-                            ws_parties.append_row([f"P{prochain_id_partie}", date_formatee, nom_partie_brut, "À déterminer", "Saison régulière", "À venir", ""])
-                            dict_p_import[nom_partie_brut] = f"P{prochain_id_partie}"
-                            prochain_id_partie += 1
                             
-                        partie_id = dict_p_import[nom_partie_brut]
-                        
+                            partie_id = f"P{prochain_id_partie}"
+                            ws_parties.append_row([partie_id, date_formatee, nom_partie_brut, "À déterminer", "Saison régulière", "À venir", ""])
+                            
+                            # On met à jour nos dictionnaires pour les prochaines lignes du même fichier
+                            dict_p_by_id[partie_id] = partie_id
+                            dict_p_by_name[nom_partie_brut] = partie_id
+                            prochain_id_partie += 1
+                                
                         # Statistiques
                         vols = int(float(row['BV'])) if 'BV' in row and str(row['BV']).replace('.','',1).isdigit() else 0
                         points = int(float(row['RUN'])) if 'RUN' in row and str(row['RUN']).replace('.','',1).isdigit() else 0
