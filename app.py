@@ -60,6 +60,50 @@ else:
     dict_parties = {}
 
 # ---------------------------------------------------------
+# Fonction pour afficher la légende (Réutilisable)
+# ---------------------------------------------------------
+def afficher_legende():
+    with st.expander("📖 Voir la légende des codes et des statistiques"):
+        st.write("**Codes d'action (Baseball Québec)**")
+        st.markdown("""
+        | Code | Signification | Est un Coup Sûr (H) ? | Est une Présence Officielle (AB) ? |
+        | :--- | :--- | :--- | :--- |
+        | **S** | Simple |  Oui |  Oui |
+        | **D** | Double |  Oui |  Oui |
+        | **T** | Triple |  Oui |  Oui |
+        | **CC** | Coup de circuit |  Oui |  Oui |
+        | **BB** | But sur balles | ❌ Non | ❌ Non |
+        | **FA** | Frappé par l'aligneur (Atteint) | ❌ Non | ❌ Non |
+        | **K / ꓘ** | Retrait sur des prises | ❌ Non |  Oui |
+        | **6-3 / F8 (etc.)** | Retrait défensif | ❌ Non |  Oui |
+        """)
+        st.caption("📌 **Rappel des positions :** 1=Lanceur (P), 2=Receveur (C), 3=1er but (1B), 4=2e but (2B), 5=3e but (3B), 6=Arrêt-court (SS), 7=Champ gauche (LF), 8=Champ centre (CF), 9=Champ droit (RF), DH=Frappeur de choix.")
+        
+        st.markdown("---")
+        st.write("**Abréviations des statistiques**")
+        st.markdown("""
+        | Abréviation | Terme anglais | Signification |
+        | :--- | :--- | :--- |
+        | **PA** | Plate Appearances | **Présences au marbre** (Total des passages au bâton) |
+        | **AB** | At-Bats | **Présences officielles** (Exclut les buts sur balles et atteints) |
+        | **R** | Runs | **Points marqués** |
+        | **H** | Hits | **Coups sûrs** (Simples, Doubles, Triples, Circuits) |
+        | **2B** | Doubles | **Doubles** (Coups sûrs de 2 buts) |
+        | **3B** | Triples | **Triples** (Coups sûrs de 3 buts) |
+        | **HR** | Home Runs | **Coups de circuit** |
+        | **RBI** | Runs Batted In | **Points produits** |
+        | **BB** | Base on Balls | **Buts sur balles** |
+        | **SB** | Stolen Bases | **Buts volés** |
+        | **AVG** | Batting Average | **Moyenne au bâton** (H ÷ AB) |
+        | **OBP** | On-Base Percentage | **Présence sur les buts** ((H + BB + FA) ÷ PA) |
+        | **SLG** | Slugging Percentage | **Puissance** (Total des buts obtenus ÷ AB) |
+        | **OPS** | On-Base Plus Slugging | **OBP + SLG** (Indice global de performance offensive) |
+        | **PO** | Putouts | **Retraits** (Défensive : action d'éliminer directement un coureur/frappeur) |
+        | **A** | Assists | **Assistances** (Défensive : lancer/relais menant à un retrait) |
+        | **E** | Errors | **Erreurs** (Défensive : jeu raté permettant à un joueur d'avancer) |
+        """)
+
+# ---------------------------------------------------------
 # Interface Utilisateur : Navigation
 # ---------------------------------------------------------
 st.sidebar.title("Navigation")
@@ -68,6 +112,8 @@ choix_menu = st.sidebar.radio("Aller vers :", ["⚾ Grille de Match", "📊 Jour
 # --- ONGLET 1 : GRILLE DE MATCH (MATRICE) ---
 if choix_menu == "⚾ Grille de Match":
     st.header("Feuille de match interactive")
+    
+    afficher_legende()
     
     if not dict_joueurs or not dict_parties:
         st.warning("Vos onglets Google Sheets sont vides.")
@@ -364,43 +410,7 @@ if choix_menu == "⚾ Grille de Match":
 elif choix_menu == "📊 Journal & Stats":
     st.header("Journal des matchs")
     
-    # Légende des codes dans un menu déroulant
-    with st.expander("📖 Voir la légende des codes et des statistiques"):
-        st.write("**Codes d'action (Baseball Québec)**")
-        st.markdown("""
-        | Code | Signification | Est un Coup Sûr (H) ? | Est une Présence Officielle (AB) ? |
-        | :--- | :--- | :--- | :--- |
-        | **S** | Simple |  Oui |  Oui |
-        | **D** | Double |  Oui |  Oui |
-        | **T** | Triple |  Oui |  Oui |
-        | **CC** | Coup de circuit |  Oui |  Oui |
-        | **BB** | But sur balles | ❌ Non | ❌ Non |
-        | **FA** | Frappé par l'aligneur (Atteint) | ❌ Non | ❌ Non |
-        | **K / ꓘ** | Retrait sur des prises | ❌ Non |  Oui |
-        | **6-3 / F8 (etc.)** | Retrait défensif | ❌ Non |  Oui |
-        """)
-        st.caption("📌 **Rappel des positions :** 1=Lanceur, 2=Receveur, 3=1er but, 4=2e but, 5=3e but, 6=Arrêt-court, 7=Champ gauche, 8=Champ centre, 9=Champ droit.")
-        
-        st.markdown("---")
-        st.write("**Abréviations du tableau de classement**")
-        st.markdown("""
-        | Abréviation | Terme anglais | Signification |
-        | :--- | :--- | :--- |
-        | **PA** | Plate Appearances | **Présences au marbre** (Total des passages au bâton) |
-        | **AB** | At-Bats | **Présences officielles** (Exclut les buts sur balles et atteints) |
-        | **R** | Runs | **Points marqués** |
-        | **H** | Hits | **Coups sûrs** (Simples, Doubles, Triples, Circuits) |
-        | **2B** | Doubles | **Doubles** (Coups sûrs de 2 buts) |
-        | **3B** | Triples | **Triples** (Coups sûrs de 3 buts) |
-        | **HR** | Home Runs | **Coups de circuit** |
-        | **RBI** | Runs Batted In | **Points produits** |
-        | **BB** | Base on Balls | **Buts sur balles** |
-        | **SB** | Stolen Bases | **Buts volés** |
-        | **AVG** | Batting Average | **Moyenne au bâton** (H ÷ AB) |
-        | **OBP** | On-Base Percentage | **Présence sur les buts** ((H + BB + FA) ÷ PA) |
-        | **SLG** | Slugging Percentage | **Puissance** (Total des buts obtenus ÷ AB) |
-        | **OPS** | On-Base Plus Slugging | **OBP + SLG** (Indice global de performance offensive) |
-        """)
+    afficher_legende()
     
     if not presences_df.empty and not joueurs_df.empty:
         # Fusion Pandas pour remplacer la requête SQL
