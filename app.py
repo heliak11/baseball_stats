@@ -136,7 +136,7 @@ def afficher_legende():
 # Interface Utilisateur : Navigation
 # ---------------------------------------------------------
 st.sidebar.title("Navigation")
-choix_menu = st.sidebar.radio("Aller vers :", ["⚾ Grille de Match", "📊 Journal & Stats", "⚙️ Gestion"])
+choix_menu = st.sidebar.radio("Aller vers :", ["⚾ Grille de Match", "📊 Journal & Stats", "⚙️ Gestion", "🛠️ Base de données"])
 
 # --- ONGLET 1 : GRILLE DE MATCH (MATRICE) ---
 if choix_menu == "⚾ Grille de Match":
@@ -1017,3 +1017,54 @@ elif choix_menu == "⚙️ Gestion":
                     st.rerun()
             else:
                 st.error("❌ Action annulée : Veuillez taper 'SUPPRIMER' en majuscules pour confirmer.")
+
+# --- ONGLET 4 : BASE DE DONNÉES (DEV) ---
+elif choix_menu == "🛠️ Base de données":
+    st.header("🛠️ Visionneuse de Base de données")
+    st.info("💡 **Mode Développeur** : Cochez la case **Supprimer** sur les lignes que vous souhaitez effacer, puis cliquez sur le bouton de suppression qui apparaîtra en bas de la table.")
+    
+    def afficher_et_gerer_table(nom_table, df, worksheet, cle_unique):
+        if df.empty:
+            st.info(f"La table {nom_table} est vide.")
+            return
+            
+        # On ajoute une colonne de cases à cocher au tout début
+        df_edit = df.copy()
+        df_edit.insert(0, "Supprimer", False)
+        
+        df_modifie = st.data_editor(
+            df_edit,
+            hide_index=True,
+            use_container_width=True,
+            key=f"editor_{cle_unique}"
+        )
+        
+        # Filtrer pour trouver quelles lignes ont été cochées
+        lignes_a_supprimer = df_modifie[df_modifie["Supprimer"] == True]
+        
+        if not lignes_a_supprimer.empty:
+            if st.button(f"🗑️ Supprimer les {len(lignes_a_supprimer)} ligne(s) sélectionnée(s) dans {nom_table}", type="primary", key=f"btn_{cle_unique}"):
+                with st.spinner(f"Suppression dans {nom_table} en cours..."):
+                    # +2 car l'index Pandas commence à 0 et la ligne 1 de Sheets est l'entête
+                    indices_gsheets = [idx + 2 for idx in lignes_a_supprimer.index.tolist()]
+                    # TRÈS IMPORTANT : Supprimer de bas en haut pour ne pas décaler les index pendant la boucle
+                    indices_gsheets.sort(reverse=True)
+                    
+                    for row_idx in indices_gsheets:
+                        worksheet.delete_rows(row_idx)
+                        
+                    charger_donnees.clear()
+                    st.success(f"✅ {len(indices_gsheets)} ligne(s) supprimée(s) avec succès !")
+                    time.sleep(1)
+                    st.rerun()
+
+    tab_bd_j, tab_bd_p, tab_bd_pres, tab_bd_def = st.tabs(["Joueurs", "Parties", "Présences", "Défense"])
+    
+    with tab_bd_j:
+        afficher_et_gerer_table("Joueurs", joueurs_df, sh.worksheet("joueurs"), "bd_j")
+    with tab_bd_p:
+        afficher_et_gerer_table("Parties", parties_df, sh.worksheet("parties"), "bd_p")
+    with tab_bd_pres:
+        afficher_et_gerer_table("Présences", presences_df, ws_presences, "bd_pres")
+    with tab_bd_def:
+        afficher_et_gerer_table("Défense", defense_df, ws_defense, "bd_def")
