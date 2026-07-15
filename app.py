@@ -845,3 +845,140 @@ elif choix_menu == "⚙️ Gestion":
                         st.success("✅ Match supprimé avec succès !")
                         time.sleep(1)
                         st.rerun()
+                        
+    # -------------------------------------
+    # IMPORTATION MASSIVE DE DONNÉES (CSV)
+    # -------------------------------------
+    st.divider()
+    st.subheader("📥 Importation de données massives (CSV)")
+    st.info("💡 **Astuce** : Vous pouvez sauvegarder votre fichier Excel au format **.csv** ou copier-coller vos données dans un fichier **.txt**, puis l'importer ici. L'application créera automatiquement les joueurs, les matchs et les actions manquants.")
+    
+    fichier_upload = st.file_uploader("Choisissez votre fichier CSV ou TXT", type=["csv", "txt"])
+    
+    if fichier_upload is not None:
+        if st.button("🚀 Lancer l'importation", type="primary"):
+            with st.spinner("Analyse et importation des données en cours..."):
+                try:
+                    # 1. Lecture du fichier (Essaie automatiquement virgule, point-virgule, ou tabulation)
+                    try:
+                        df_import = pd.read_csv(fichier_upload)
+                        if len(df_import.columns) < 5:
+                            fichier_upload.seek(0)
+                            df_import = pd.read_csv(fichier_upload, sep=';')
+                            if len(df_import.columns) < 5:
+                                fichier_upload.seek(0)
+                                df_import = pd.read_csv(fichier_upload, sep='\t')
+                    except Exception as e:
+                        st.error(f"Erreur de lecture du fichier : {e}")
+                        st.stop()
+                        
+                    df_import.columns = df_import.columns.str.strip()
+                    df_import = df_import.fillna(0)
+                    
+                    # 2. Récupération des données existantes
+                    ws_joueurs = sh.worksheet("joueurs")
+                    ws_parties = sh.worksheet("parties")
+                    
+                    joueurs_existants = ws_joueurs.get_all_records()
+                    parties_existantes = ws_parties.get_all_records()
+                    
+                    dict_j_import = {f"{str(j.get('prenom', ''))} {str(j.get('nom', ''))}".strip(): j['id'] for j in joueurs_existants}
+                    dict_p_import = {str(p.get('equipe_adverse', '')).strip(): p['id'] for p in parties_existantes}
+                    
+                    prochain_id_joueur = len(ws_joueurs.get_all_values())
+                    prochain_id_partie = len(ws_parties.get_all_values())
+                    prochain_id_presence = len(ws_presences.get_all_values())
+                    
+                    nouvelles_presences = []
+                    
+                    colonnes_actions = {
+                        '1B': '1B', '2B': '2B', '3B': '3B', 'CC': 'CC', 
+                        'KE': 'KE', 'KD': 'KD', 'FO': 'FO', 'GO': 'GO', 
+                        'SAC': 'SAC', 'E/OPT': 'E', 'BB': 'BB', 'FA': 'FA'
+                    }
+                    
+                    # 3. Traitement des lignes
+                    for index, row in df_import.iterrows():
+                        if 'joueur' not in row or 'Partie' not in row:
+                            continue
+                            
+                        nom_joueur_brut = str(row['joueur']).strip()
+                        nom_partie_brut = str(row['Partie']).strip()
+                        
+                        if not nom_joueur_brut or not nom_partie_brut or nom_joueur_brut == '0' or nom_partie_brut == '0':
+                            continue
+                            
+                        # Joueur
+                        if nom_joueur_brut not in dict_j_import:
+                            parts = nom_joueur_brut.split(' ', 1)
+                            prenom = parts[0]
+                            nom = parts[1] if len(parts) > 1 else ""
+                            ws_joueurs.append_row([prochain_id_joueur, prenom, nom, 0])
+                            dict_j_import[nom_joueur_brut] = prochain_id_joueur
+                            prochain_id_joueur += 1
+                            
+                        joueur_id = dict_j_import[nom_joueur_brut]
+                        
+                        # Partie
+                        if nom_partie_brut not in dict_p_import:
+                            date_str = str(row.get('Date', '')).strip()
+                            try:
+                                if date_str and date_str != '0':
+                                    date_formatee = datetime.datetime.strptime(date_str, "%d-%b-%y").strftime("%Y-%m-%d")
+                                else:
+                                    date_formatee = datetime.date.today().strftime("%Y-%m-%d")
+                            except Exception:
+                                date_formatee = date_str if date_str and date_str != '0' else datetime.date.today().strftime("%Y-%m-%d")
+                                
+                            ws_parties.append_row([prochain_id_partie, date_formatee, nom_partie_brut, "À déterminer", "Saison régulière", "À venir", ""])
+                            dict_p_import[nom_partie_brut] = prochain_id_partie
+                            prochain_id_partie += 1
+                            
+                        partie_id = dict_p_import[nom_partie_brut]
+                        
+                        # Statistiques
+                        vols = int(float(row['BV'])) if 'BV' in row and str(row['BV']).replace('.','',1).isdigit() else 0
+                        points = int(float(row['RUN'])) if 'RUN' in row and str(row['RUN']).replace('.','',1).isdigit() else 0
+                        
+                        rbi = 0
+                        if 'PP' in row:
+                            try:
+                                rbi = int(float(row['PP']))
+                            except Exception:
+                                pass
+                                
+                        actions_pour_ce_joueur = []
+                        
+                        for col_csv, code_app in colonnes_actions.items():
+                            if col_csv in row:
+                                try:
+                                    quantite = int(float(row[col_csv]))
+                                    for _ in range(quantite):
+                                        actions_pour_ce_joueur.append(code_app)
+                                except (ValueError, TypeError):
+                                    pass
+                                    
+                        if len(actions_pour_ce_joueur) == 0 and (vols > 0 or points > 0 or rbi > 0):
+                            actions_pour_ce_joueur.append("")
+                            
+                        for i, code_action in enumerate(actions_pour_ce_joueur):
+                            est_premiere_action = (i == 0)
+                            nouvelles_presences.append([
+                                prochain_id_presence, partie_id, joueur_id, 1, code_action, 
+                                points if est_premiere_action else 0, 
+                                rbi if est_premiere_action else 0, 
+                                vols if est_premiere_action else 0
+                            ])
+                            prochain_id_presence += 1
+
+                    if nouvelles_presences:
+                        ws_presences.append_rows(nouvelles_presences)
+                        charger_donnees.clear()
+                        st.success(f"✅ {len(nouvelles_presences)} présences importées avec succès !")
+                        time.sleep(2)
+                        st.rerun()
+                    else:
+                        st.warning("⚠️ Le fichier a été lu, mais aucune ligne d'action valide n'a été trouvée. Vérifiez vos en-têtes (joueur, Partie, 1B, 2B, etc.).")
+                        
+                except Exception as e:
+                    st.error(f"❌ Une erreur s'est produite durant l'importation : {e}")
