@@ -897,6 +897,8 @@ elif choix_menu == "⚙️ Gestion":
                     dict_p_by_id = {str(p.get('id', '')): str(p.get('id', '')) for p in parties_existantes}
                     dict_p_by_name = {str(p.get('equipe_adverse', '')).strip(): p['id'] for p in parties_existantes}
                     dict_j_exact = {f"{str(j.get('prenom', ''))} {str(j.get('nom', ''))}".strip().lower(): j['id'] for j in joueurs_existants}
+                    # 2. Récupération des données existantes (DataFrames)
+                    dict_j_exact = {}
                     dict_j_initial = {}
                     for j in joueurs_existants:
                         p = str(j.get('prenom', '')).strip()
@@ -910,6 +912,31 @@ elif choix_menu == "⚙️ Gestion":
                     dict_p_by_id = {str(p.get('id', '')).strip().lower(): str(p.get('id', '')) for p in parties_existantes}
                     dict_p_by_name = {str(p.get('equipe_adverse', '')).strip().lower(): p['id'] for p in parties_existantes}
                     
+                    if not joueurs_df.empty:
+                        for _, j in joueurs_df.iterrows():
+                            p = str(j.get('prenom', '')).strip()
+                            n = str(j.get('nom', '')).strip()
+                            j_id = j['id']
+                            if p and n:
+                                dict_j_exact[f"{p} {n}".lower()] = j_id
+                                dict_j_initial[f"{p[0]} {n}".lower()] = j_id
+                                # Gestion des prénoms composés (ex: Louis-Karl -> L-K ou LK)
+                                if '-' in p:
+                                    initiales_composees = "-".join([part[0] for part in p.split('-') if part])
+                                    dict_j_initial[f"{initiales_composees} {n}".lower()] = j_id
+                                    initiales_collees = "".join([part[0] for part in p.split('-') if part])
+                                    dict_j_initial[f"{initiales_collees} {n}".lower()] = j_id
+
+                    dict_p_by_id = {}
+                    dict_p_by_name = {}
+                    if not parties_df.empty:
+                        for _, p in parties_df.iterrows():
+                            p_id = str(p.get('id', ''))
+                            p_nom = str(p.get('equipe_adverse', '')).strip().lower()
+                            dict_p_by_id[p_id.lower()] = p_id
+                            if p_nom:
+                                dict_p_by_name[p_nom] = p_id
+
                     nouvelles_presences = []
                     erreurs_joueurs = set()
                     erreurs_parties = set()
@@ -922,6 +949,7 @@ elif choix_menu == "⚙️ Gestion":
                     }
                     
                     # 3. Traitement des lignes
+                    # 3. Validation des lignes
                     for index, row in df_import.iterrows():
                         if 'joueur' not in row or 'Partie' not in row:
                             continue
@@ -940,6 +968,7 @@ elif choix_menu == "⚙️ Gestion":
                             ws_joueurs.append_row([prochain_id_joueur, prenom, nom, 0])
                             dict_j_import[nom_joueur_brut] = prochain_id_joueur
                             prochain_id_joueur += 1
+                        # Validation Joueur
                         joueur_key = nom_joueur_brut.lower()
                         joueur_id = None
                         if joueur_key in dict_j_exact:
@@ -952,6 +981,7 @@ elif choix_menu == "⚙️ Gestion":
                         joueur_id = dict_j_import[nom_joueur_brut]
                         
                         # Partie (Logique améliorée)
+                        # Validation Partie
                         partie_id = None
                         # 1. On cherche si la valeur est un ID de partie existant
                         if nom_partie_brut in dict_p_by_id:
@@ -989,16 +1019,20 @@ elif choix_menu == "⚙️ Gestion":
                         # Statistiques
                         vols = int(float(row['BV'])) if 'BV' in row and str(row['BV']).replace('.','',1).isdigit() else 0
                         points = int(float(row['RUN'])) if 'RUN' in row and str(row['RUN']).replace('.','',1).isdigit() else 0
+
                     if erreurs_joueurs or erreurs_parties:
                         if erreurs_joueurs:
                             st.error(f"❌ Joueurs introuvables : {', '.join(erreurs_joueurs)}")
                             st.info("💡 L'application ne crée plus de joueurs automatiquement. Veuillez d'abord les ajouter dans l'onglet 'Ajouter' ou vérifier l'orthographe dans votre fichier CSV (ex: 'R Gagnon' ou 'René Gagnon').")
+                            st.info("💡 Vérifiez l'orthographe dans le CSV (ex: 'R Gagnon', 'L-K Comtois') ou ajoutez-les dans l'onglet 'Ajouter'.")
                         if erreurs_parties:
                             st.error(f"❌ Matchs introuvables : {', '.join(erreurs_parties)}")
                             st.info("💡 L'application ne crée plus de matchs automatiquement. Veuillez d'abord les ajouter dans l'onglet 'Ajouter' et utiliser leur ID (ex: 'P2') ou l'équipe adverse.")
+                            st.info("💡 Veuillez utiliser l'ID du match (ex: 'P2') ou l'équipe adverse.")
                         st.stop()
                         
                     nouvelles_presences = []
+                    # 4. Traitement des lignes valides
                     prochain_id_presence = len(ws_presences.get_all_values())
                     
                     for joueur_id, partie_id, row in lignes_valides:
