@@ -17,6 +17,11 @@ sh = gc.open_by_url("https://docs.google.com/spreadsheets/d/1mDPEcK9zRMKj7YZLqI1
 
 # On garde la référence de l'onglet des présences pour pouvoir y écrire
 ws_presences = sh.worksheet("presences")
+try:
+    ws_defense = sh.worksheet("defense")
+except gspread.WorksheetNotFound:
+    ws_defense = sh.add_worksheet(title="defense", rows="1000", cols="8")
+    ws_defense.append_row(["id", "partie_id", "joueur_id", "manche", "position", "po", "a", "e"])
 
 # ---------------------------------------------------------
 # Chargement optimisé des données (Mise en cache)
@@ -27,16 +32,17 @@ def charger_donnees():
     df_j = pd.DataFrame(sh.worksheet("joueurs").get_all_records())
     df_p = pd.DataFrame(sh.worksheet("parties").get_all_records())
     df_pres = pd.DataFrame(ws_presences.get_all_records())
-    return df_j, df_p, df_pres
+    df_def = pd.DataFrame(ws_defense.get_all_records())
+    return df_j, df_p, df_pres, df_def
 
 # On appelle la fonction mise en cache (instantané après le 1er chargement !)
-joueurs_df, parties_df, presences_df = charger_donnees()
+joueurs_df, parties_df, presences_df, defense_df = charger_donnees()
 
 # ---------------------------------------------------------
 # Normalisation des en-têtes pour éviter les erreurs de frappe
 # (enlève les espaces, met en minuscules, retire les accents)
 # ---------------------------------------------------------
-for df in [joueurs_df, parties_df, presences_df]:
+for df in [joueurs_df, parties_df, presences_df, defense_df]:
     if not df.empty:
         df.columns = df.columns.str.strip().str.lower().str.replace('é', 'e').str.replace('è', 'e')
 
@@ -67,156 +73,292 @@ if choix_menu == "⚾ Grille de Match":
         st.warning("Vos onglets Google Sheets sont vides.")
     else:
         partie_grille = st.selectbox("Sélectionnez le match", list(dict_parties.keys()), key="select_match_grille")
-        st.write("Remplissez les cases avec les résultats. Laissez vide si le joueur n'a pas frappé.")
         
         partie_id_selectionnee = dict_parties[partie_grille]
         
-        # 1. Préparer le tableau vide (Lignes = Joueurs, Colonnes = Manches 1 à 9)
-        noms = list(dict_joueurs.keys())
-        df_grille = pd.DataFrame({"Joueur": noms})
-        for i in range(1, 10):
-            df_grille[f"M{i}"] = ""
-            
-        # Ajout des colonnes pour les statistiques globales du match
-        df_grille["Points"] = 0
-        df_grille["RBI"] = 0
-        df_grille["Vols"] = 0
-
-        mapping_lignes_gs = {}
-        # 2. Pré-remplir avec les données existantes pour ce match
-        if not presences_df.empty:
-            # On convertit les identifiants en texte pour éviter les erreurs de comparaison (ex: 1 vs "1")
-            presences_match = presences_df[presences_df['partie_id'].astype(str) == str(partie_id_selectionnee)]
-            for idx_df, row_pres in presences_match.iterrows():
-                joueur_nom = next((nom for nom, j_id in dict_joueurs.items() if str(j_id) == str(row_pres['joueur_id'])), None)
-                if joueur_nom and pd.notna(row_pres['manche']):
-                    # Pandas transforme parfois les chiffres en décimales (1.0 au lieu de 1). On sécurise avec un `int` pur.
-                    try:
-                        manche_int = int(float(row_pres['manche']))
-                        if 1 <= manche_int <= 9:
-                            idx = df_grille.index[df_grille['Joueur'] == joueur_nom].tolist()
-                            if idx:
-                                df_grille.at[idx[0], f"M{manche_int}"] = str(row_pres['code_resultat'])
-                                mapping_lignes_gs[(str(dict_joueurs[joueur_nom]), manche_int)] = {
-                                    "ligne": idx_df + 2,
-                                    "code": str(row_pres['code_resultat']),
-                                    "points": int(row_pres.get('point_marque', 0) or 0),
-                                    "rbi": int(row_pres.get('points_produits', 0) or 0),
-                                    "vols": int(row_pres.get('buts_voles', 0) or 0)
-                                }
-                                # Accumuler les stats pour l'affichage
-                                df_grille.at[idx[0], "Points"] += int(row_pres.get('point_marque', 0) or 0)
-                                df_grille.at[idx[0], "RBI"] += int(row_pres.get('points_produits', 0) or 0)
-                                df_grille.at[idx[0], "Vols"] += int(row_pres.get('buts_voles', 0) or 0)
-                    except ValueError:
-                        pass
-            
-        # 3. Configurer les colonnes pour avoir des menus déroulants
-        options_codes = ["", "S", "D", "T", "CC", "BB", "FA", "K", "6-3", "F8"]
-        col_config = {"Joueur": st.column_config.Column(disabled=True)}
-        for i in range(1, 10):
-            col_config[f"M{i}"] = st.column_config.SelectboxColumn(label=str(i), options=options_codes, width="small")
-            
-        # Configuration des nouvelles colonnes
-        col_config["Points"] = st.column_config.NumberColumn(label="Points (R)", min_value=0, step=1, width="small")
-        col_config["RBI"] = st.column_config.NumberColumn(label="Produits (RBI)", min_value=0, step=1, width="small")
-        col_config["Vols"] = st.column_config.NumberColumn(label="Volés (SB)", min_value=0, step=1, width="small")
-
-        # 4. Afficher la grille éditable
-        grille_editee = st.data_editor(df_grille, column_config=col_config, hide_index=True, use_container_width=True)
+        onglet_off, onglet_def = st.tabs(["🏏 Offensive", "🧤 Défensive"])
         
-        # 5. Bouton de sauvegarde de masse
-        if st.button("💾 Enregistrer la grille", type="primary", use_container_width=True):
-            with st.spinner("💾 Synchronisation de la grille complète..."):
-                prochain_id = len(ws_presences.get_all_values())
-                lignes_a_ajouter = []
-                mises_a_jour = 0
-                
-                for index, row in grille_editee.iterrows():
-                    joueur_id_original = dict_joueurs[row["Joueur"]]
-                    joueur_id_str = str(joueur_id_original)
-                    
-                    # Récupération des totaux pour ce joueur
-                    pts_total = int(row["Points"])
-                    rbi_total = int(row["RBI"])
-                    vols_total = int(row["Vols"])
-                    
-                    # Déterminer la manche cible pour enregistrer ces totaux (la 1ère manche jouée)
-                    manche_cible = None
-                    for m in range(1, 10):
-                        if not pd.isna(row[f"M{m}"]) and str(row[f"M{m}"]).strip() != "":
-                            manche_cible = m
-                            break
-                    
-                    # S'il a des stats mais aucune présence au bâton, on force la manche 1 (ex: coureur suppléant)
-                    if manche_cible is None and (pts_total > 0 or rbi_total > 0 or vols_total > 0):
-                        manche_cible = 1
-
-                    for manche in range(1, 10):
-                        valeur_nouvelle = "" if pd.isna(row[f"M{manche}"]) else str(row[f"M{manche}"]).strip()
-                        info_gs = mapping_lignes_gs.get((joueur_id_str, manche))
-                        
-                        valeur_originale = info_gs["code"] if info_gs else ""
-                        pts_original = info_gs["points"] if info_gs else 0
-                        rbi_original = info_gs["rbi"] if info_gs else 0
-                        vols_original = info_gs["vols"] if info_gs else 0
-                        
-                        # On assigne toutes les stats à la manche cible, 0 pour les autres
-                        est_cible = (manche == manche_cible)
-                        pts_assigne = pts_total if est_cible else 0
-                        rbi_assigne = rbi_total if est_cible else 0
-                        vols_assigne = vols_total if est_cible else 0
-                        
-                        if not info_gs:
-                            # Ce n'était pas dans la base de données
-                            if valeur_nouvelle != "" or (est_cible and (pts_assigne > 0 or rbi_assigne > 0 or vols_assigne > 0)):
-                                # C'est une nouvelle présence
-                                lignes_a_ajouter.append([
-                                    prochain_id,
-                                    partie_id_selectionnee,
-                                    joueur_id_original,
-                                    manche,
-                                    valeur_nouvelle,
-                                    pts_assigne, 
-                                    rbi_assigne, 
-                                    vols_assigne
-                                ])
-                                prochain_id += 1
-                        else:
-                            # Présence existante : vérifier quels champs ont changé
-                            ligne_idx = info_gs["ligne"]
-                            modifie = False
-                            
-                            if valeur_originale != valeur_nouvelle:
-                                ws_presences.update_cell(ligne_idx, 5, valeur_nouvelle)
-                                modifie = True
-                            if pts_original != pts_assigne:
-                                ws_presences.update_cell(ligne_idx, 6, pts_assigne)
-                                modifie = True
-                            if rbi_original != rbi_assigne:
-                                ws_presences.update_cell(ligne_idx, 7, rbi_assigne)
-                                modifie = True
-                            if vols_original != vols_assigne:
-                                ws_presences.update_cell(ligne_idx, 8, vols_assigne)
-                                modifie = True
-                                
-                            if modifie:
-                                mises_a_jour += 1
-                            
-                if lignes_a_ajouter:
-                    ws_presences.append_rows(lignes_a_ajouter)
+        with onglet_off:
+            st.write("Remplissez les cases avec les résultats offensifs. Laissez vide si le joueur n'a pas frappé.")
             
-            if lignes_a_ajouter or mises_a_jour > 0:
-                # Rafraichir le cache
-                charger_donnees.clear()
-                messages = []
-                if lignes_a_ajouter: messages.append(f"{len(lignes_a_ajouter)} ajout(s)")
-                if mises_a_jour > 0: messages.append(f"{mises_a_jour} modification(s)")
-                st.success(f"✅ Enregistré avec succès : {' et '.join(messages)} !")
-                time.sleep(1)
-                st.rerun()
-            else:
-                st.info("ℹ️ Aucune modification détectée.")
+            # 1. Préparer le tableau vide (Lignes = Joueurs, Colonnes = Manches 1 à 9)
+            noms = list(dict_joueurs.keys())
+            df_grille = pd.DataFrame({"Joueur": noms})
+            for i in range(1, 10):
+                df_grille[f"M{i}"] = ""
+                
+            # Ajout des colonnes pour les statistiques globales du match
+            df_grille["Points"] = 0
+            df_grille["RBI"] = 0
+            df_grille["Vols"] = 0
+
+            mapping_lignes_gs = {}
+            # 2. Pré-remplir avec les données existantes pour ce match
+            if not presences_df.empty:
+                # On convertit les identifiants en texte pour éviter les erreurs de comparaison (ex: 1 vs "1")
+                presences_match = presences_df[presences_df['partie_id'].astype(str) == str(partie_id_selectionnee)]
+                for idx_df, row_pres in presences_match.iterrows():
+                    joueur_nom = next((nom for nom, j_id in dict_joueurs.items() if str(j_id) == str(row_pres['joueur_id'])), None)
+                    if joueur_nom and pd.notna(row_pres['manche']):
+                        # Pandas transforme parfois les chiffres en décimales (1.0 au lieu de 1). On sécurise avec un `int` pur.
+                        try:
+                            manche_int = int(float(row_pres['manche']))
+                            if 1 <= manche_int <= 9:
+                                idx = df_grille.index[df_grille['Joueur'] == joueur_nom].tolist()
+                                if idx:
+                                    df_grille.at[idx[0], f"M{manche_int}"] = str(row_pres['code_resultat'])
+                                    mapping_lignes_gs[(str(dict_joueurs[joueur_nom]), manche_int)] = {
+                                        "ligne": idx_df + 2,
+                                        "code": str(row_pres['code_resultat']),
+                                        "points": int(row_pres.get('point_marque', 0) or 0),
+                                        "rbi": int(row_pres.get('points_produits', 0) or 0),
+                                        "vols": int(row_pres.get('buts_voles', 0) or 0)
+                                    }
+                                    # Accumuler les stats pour l'affichage
+                                    df_grille.at[idx[0], "Points"] += int(row_pres.get('point_marque', 0) or 0)
+                                    df_grille.at[idx[0], "RBI"] += int(row_pres.get('points_produits', 0) or 0)
+                                    df_grille.at[idx[0], "Vols"] += int(row_pres.get('buts_voles', 0) or 0)
+                        except ValueError:
+                            pass
+                
+            # 3. Configurer les colonnes pour avoir des menus déroulants
+            options_codes = ["", "S", "D", "T", "CC", "BB", "FA", "K", "6-3", "F8"]
+            col_config = {"Joueur": st.column_config.Column(disabled=True)}
+            for i in range(1, 10):
+                col_config[f"M{i}"] = st.column_config.SelectboxColumn(label=str(i), options=options_codes, width="small")
+                
+            # Configuration des nouvelles colonnes
+            col_config["Points"] = st.column_config.NumberColumn(label="Points (R)", min_value=0, step=1, width="small")
+            col_config["RBI"] = st.column_config.NumberColumn(label="Produits (RBI)", min_value=0, step=1, width="small")
+            col_config["Vols"] = st.column_config.NumberColumn(label="Volés (SB)", min_value=0, step=1, width="small")
+
+            # 4. Afficher la grille éditable
+            grille_editee = st.data_editor(df_grille, column_config=col_config, hide_index=True, use_container_width=True, key="grille_off")
+            
+            # 5. Bouton de sauvegarde de masse
+            if st.button("💾 Enregistrer l'offensive", type="primary", use_container_width=True):
+                with st.spinner("💾 Synchronisation de l'offensive..."):
+                    prochain_id = len(ws_presences.get_all_values())
+                    lignes_a_ajouter = []
+                    mises_a_jour = 0
+                    
+                    for index, row in grille_editee.iterrows():
+                        joueur_id_original = dict_joueurs[row["Joueur"]]
+                        joueur_id_str = str(joueur_id_original)
+                        
+                        # Récupération des totaux pour ce joueur
+                        pts_total = int(row["Points"])
+                        rbi_total = int(row["RBI"])
+                        vols_total = int(row["Vols"])
+                        
+                        # Déterminer la manche cible pour enregistrer ces totaux (la 1ère manche jouée)
+                        manche_cible = None
+                        for m in range(1, 10):
+                            if not pd.isna(row[f"M{m}"]) and str(row[f"M{m}"]).strip() != "":
+                                manche_cible = m
+                                break
+                        
+                        # S'il a des stats mais aucune présence au bâton, on force la manche 1 (ex: coureur suppléant)
+                        if manche_cible is None and (pts_total > 0 or rbi_total > 0 or vols_total > 0):
+                            manche_cible = 1
+
+                        for manche in range(1, 10):
+                            valeur_nouvelle = "" if pd.isna(row[f"M{manche}"]) else str(row[f"M{manche}"]).strip()
+                            info_gs = mapping_lignes_gs.get((joueur_id_str, manche))
+                            
+                            valeur_originale = info_gs["code"] if info_gs else ""
+                            pts_original = info_gs["points"] if info_gs else 0
+                            rbi_original = info_gs["rbi"] if info_gs else 0
+                            vols_original = info_gs["vols"] if info_gs else 0
+                            
+                            # On assigne toutes les stats à la manche cible, 0 pour les autres
+                            est_cible = (manche == manche_cible)
+                            pts_assigne = pts_total if est_cible else 0
+                            rbi_assigne = rbi_total if est_cible else 0
+                            vols_assigne = vols_total if est_cible else 0
+                            
+                            if not info_gs:
+                                # Ce n'était pas dans la base de données
+                                if valeur_nouvelle != "" or (est_cible and (pts_assigne > 0 or rbi_assigne > 0 or vols_assigne > 0)):
+                                    # C'est une nouvelle présence
+                                    lignes_a_ajouter.append([
+                                        prochain_id,
+                                        partie_id_selectionnee,
+                                        joueur_id_original,
+                                        manche,
+                                        valeur_nouvelle,
+                                        pts_assigne, 
+                                        rbi_assigne, 
+                                        vols_assigne
+                                    ])
+                                    prochain_id += 1
+                            else:
+                                # Présence existante : vérifier quels champs ont changé
+                                ligne_idx = info_gs["ligne"]
+                                modifie = False
+                                
+                                if valeur_originale != valeur_nouvelle:
+                                    ws_presences.update_cell(ligne_idx, 5, valeur_nouvelle)
+                                    modifie = True
+                                if pts_original != pts_assigne:
+                                    ws_presences.update_cell(ligne_idx, 6, pts_assigne)
+                                    modifie = True
+                                if rbi_original != rbi_assigne:
+                                    ws_presences.update_cell(ligne_idx, 7, rbi_assigne)
+                                    modifie = True
+                                if vols_original != vols_assigne:
+                                    ws_presences.update_cell(ligne_idx, 8, vols_assigne)
+                                    modifie = True
+                                    
+                                if modifie:
+                                    mises_a_jour += 1
+                                
+                    if lignes_a_ajouter:
+                        ws_presences.append_rows(lignes_a_ajouter)
+                
+                if lignes_a_ajouter or mises_a_jour > 0:
+                    # Rafraichir le cache
+                    charger_donnees.clear()
+                    messages = []
+                    if lignes_a_ajouter: messages.append(f"{len(lignes_a_ajouter)} ajout(s)")
+                    if mises_a_jour > 0: messages.append(f"{mises_a_jour} modification(s)")
+                    st.success(f"✅ Offensive enregistrée avec succès : {' et '.join(messages)} !")
+                    time.sleep(1)
+                    st.rerun()
+                else:
+                    st.info("ℹ️ Aucune modification détectée pour l'offensive.")
+
+        with onglet_def:
+            st.write("Remplissez les positions défensives par manche (1=P, 2=C, 3=1B, etc.). Entrez les Retraits (PO), Assistances (A) et Erreurs (E) globalement.")
+            
+            noms_def = list(dict_joueurs.keys())
+            df_grille_def = pd.DataFrame({"Joueur": noms_def})
+            for i in range(1, 10):
+                df_grille_def[f"M{i}"] = ""
+                
+            df_grille_def["PO"] = 0
+            df_grille_def["A"] = 0
+            df_grille_def["E"] = 0
+
+            mapping_lignes_gs_def = {}
+            if not defense_df.empty:
+                defense_match = defense_df[defense_df['partie_id'].astype(str) == str(partie_id_selectionnee)]
+                for idx_df, row_def in defense_match.iterrows():
+                    joueur_nom = next((nom for nom, j_id in dict_joueurs.items() if str(j_id) == str(row_def['joueur_id'])), None)
+                    if joueur_nom and pd.notna(row_def['manche']):
+                        try:
+                            manche_int = int(float(row_def['manche']))
+                            if 1 <= manche_int <= 9:
+                                idx = df_grille_def.index[df_grille_def['Joueur'] == joueur_nom].tolist()
+                                if idx:
+                                    df_grille_def.at[idx[0], f"M{manche_int}"] = str(row_def.get('position', ''))
+                                    mapping_lignes_gs_def[(str(dict_joueurs[joueur_nom]), manche_int)] = {
+                                        "ligne": idx_df + 2,
+                                        "position": str(row_def.get('position', '')),
+                                        "po": int(row_def.get('po', 0) or 0),
+                                        "a": int(row_def.get('a', 0) or 0),
+                                        "e": int(row_def.get('e', 0) or 0)
+                                    }
+                                    df_grille_def.at[idx[0], "PO"] += int(row_def.get('po', 0) or 0)
+                                    df_grille_def.at[idx[0], "A"] += int(row_def.get('a', 0) or 0)
+                                    df_grille_def.at[idx[0], "E"] += int(row_def.get('e', 0) or 0)
+                        except ValueError:
+                            pass
+                            
+            options_pos = ["", "1", "2", "3", "4", "5", "6", "7", "8", "9", "DH"]
+            col_config_def = {"Joueur": st.column_config.Column(disabled=True)}
+            for i in range(1, 10):
+                col_config_def[f"M{i}"] = st.column_config.SelectboxColumn(label=str(i), options=options_pos, width="small")
+                
+            col_config_def["PO"] = st.column_config.NumberColumn(label="Retraits (PO)", min_value=0, step=1, width="small")
+            col_config_def["A"] = st.column_config.NumberColumn(label="Assistances (A)", min_value=0, step=1, width="small")
+            col_config_def["E"] = st.column_config.NumberColumn(label="Erreurs (E)", min_value=0, step=1, width="small")
+            
+            grille_editee_def = st.data_editor(df_grille_def, column_config=col_config_def, hide_index=True, use_container_width=True, key="grille_def")
+            
+            if st.button("💾 Enregistrer la défensive", type="primary", use_container_width=True):
+                with st.spinner("💾 Synchronisation de la grille défensive..."):
+                    prochain_id_def = len(ws_defense.get_all_values())
+                    lignes_a_ajouter_def = []
+                    mises_a_jour_def = 0
+                    
+                    for index, row in grille_editee_def.iterrows():
+                        joueur_id_original = dict_joueurs[row["Joueur"]]
+                        joueur_id_str = str(joueur_id_original)
+                        
+                        po_total = int(row["PO"])
+                        a_total = int(row["A"])
+                        e_total = int(row["E"])
+                        
+                        manche_cible = None
+                        for m in range(1, 10):
+                            if not pd.isna(row[f"M{m}"]) and str(row[f"M{m}"]).strip() != "":
+                                manche_cible = m
+                                break
+                                
+                        if manche_cible is None and (po_total > 0 or a_total > 0 or e_total > 0):
+                            manche_cible = 1
+                            
+                        for manche in range(1, 10):
+                            valeur_nouvelle = "" if pd.isna(row[f"M{manche}"]) else str(row[f"M{manche}"]).strip()
+                            info_gs = mapping_lignes_gs_def.get((joueur_id_str, manche))
+                            
+                            valeur_originale = info_gs["position"] if info_gs else ""
+                            po_original = info_gs["po"] if info_gs else 0
+                            a_original = info_gs["a"] if info_gs else 0
+                            e_original = info_gs["e"] if info_gs else 0
+                            
+                            est_cible = (manche == manche_cible)
+                            po_assigne = po_total if est_cible else 0
+                            a_assigne = a_total if est_cible else 0
+                            e_assigne = e_total if est_cible else 0
+                            
+                            if not info_gs:
+                                if valeur_nouvelle != "" or (est_cible and (po_assigne > 0 or a_assigne > 0 or e_assigne > 0)):
+                                    lignes_a_ajouter_def.append([
+                                        prochain_id_def,
+                                        partie_id_selectionnee,
+                                        joueur_id_original,
+                                        manche,
+                                        valeur_nouvelle,
+                                        po_assigne,
+                                        a_assigne,
+                                        e_assigne
+                                    ])
+                                    prochain_id_def += 1
+                            else:
+                                ligne_idx = info_gs["ligne"]
+                                modifie = False
+                                
+                                if valeur_originale != valeur_nouvelle:
+                                    ws_defense.update_cell(ligne_idx, 5, valeur_nouvelle)
+                                    modifie = True
+                                if po_original != po_assigne:
+                                    ws_defense.update_cell(ligne_idx, 6, po_assigne)
+                                    modifie = True
+                                if a_original != a_assigne:
+                                    ws_defense.update_cell(ligne_idx, 7, a_assigne)
+                                    modifie = True
+                                if e_original != e_assigne:
+                                    ws_defense.update_cell(ligne_idx, 8, e_assigne)
+                                    modifie = True
+                                    
+                                if modifie:
+                                    mises_a_jour_def += 1
+                                    
+                    if lignes_a_ajouter_def:
+                        ws_defense.append_rows(lignes_a_ajouter_def)
+                        
+                if lignes_a_ajouter_def or mises_a_jour_def > 0:
+                    charger_donnees.clear()
+                    messages = []
+                    if lignes_a_ajouter_def: messages.append(f"{len(lignes_a_ajouter_def)} ajout(s)")
+                    if mises_a_jour_def > 0: messages.append(f"{mises_a_jour_def} modification(s)")
+                    st.success(f"✅ Défensive enregistrée avec succès : {' et '.join(messages)} !")
+                    time.sleep(1)
+                    st.rerun()
+                else:
+                    st.info("ℹ️ Aucune modification détectée pour la défensive.")
 
 # --- ONGLET 2 : STATISTIQUES ET JOURNAL ---
 elif choix_menu == "📊 Journal & Stats":
