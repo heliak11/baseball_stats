@@ -756,7 +756,7 @@ elif choix_menu == "⚙️ Gestion":
                         with st.spinner("Création du match..."):
                             ws_parties = sh.worksheet("parties")
                             nouvel_id_p = len(ws_parties.get_all_values())
-                            ws_parties.append_row([nouvel_id_p, str(date_match), equipe_adverse.strip(), lieu.strip(), type_match, resultat, pointage.strip()])
+                            ws_parties.append_row([f"P{nouvel_id_p}", date_match.strftime("%Y-%m-%d"), equipe_adverse.strip(), lieu.strip(), type_match, resultat, pointage.strip()])
                             
                         charger_donnees.clear()
                         st.success(f"✅ Match contre {equipe_adverse} créé !")
@@ -810,7 +810,7 @@ elif choix_menu == "⚙️ Gestion":
                                 ws_parties = sh.worksheet("parties")
                                 # Trouver la ligne exacte (+2)
                                 row_idx = parties_df.index[parties_df['id'] == m_id].tolist()[0] + 2
-                                ws_parties.update_cell(row_idx, 2, str(nouvelle_date))
+                                ws_parties.update_cell(row_idx, 2, nouvelle_date.strftime("%Y-%m-%d"))
                                 ws_parties.update_cell(row_idx, 3, nouvelle_equipe.strip())
                                 ws_parties.update_cell(row_idx, 4, nouveau_lieu.strip())
                                 ws_parties.update_cell(row_idx, 5, nouveau_type)
@@ -930,8 +930,8 @@ elif choix_menu == "⚙️ Gestion":
                             except Exception:
                                 date_formatee = date_str if date_str and date_str != '0' else datetime.date.today().strftime("%Y-%m-%d")
                                 
-                            ws_parties.append_row([prochain_id_partie, date_formatee, nom_partie_brut, "À déterminer", "Saison régulière", "À venir", ""])
-                            dict_p_import[nom_partie_brut] = prochain_id_partie
+                            ws_parties.append_row([f"P{prochain_id_partie}", date_formatee, nom_partie_brut, "À déterminer", "Saison régulière", "À venir", ""])
+                            dict_p_import[nom_partie_brut] = f"P{prochain_id_partie}"
                             prochain_id_partie += 1
                             
                         partie_id = dict_p_import[nom_partie_brut]
