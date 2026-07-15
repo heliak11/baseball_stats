@@ -1021,42 +1021,65 @@ elif choix_menu == "⚙️ Gestion":
 # --- ONGLET 4 : BASE DE DONNÉES (DEV) ---
 elif choix_menu == "🛠️ Base de données":
     st.header("🛠️ Visionneuse de Base de données")
-    st.info("💡 **Mode Développeur** : Cochez la case **Supprimer** sur les lignes que vous souhaitez effacer, puis cliquez sur le bouton de suppression qui apparaîtra en bas de la table.")
+    st.info("💡 **Mode Développeur complet** : Modifiez les cellules d'un double-clic, ajoutez des lignes en bas du tableau, ou supprimez des lignes (cochez à gauche + icône corbeille). N'oubliez pas de **sauvegarder** !")
     
     def afficher_et_gerer_table(nom_table, df, worksheet, cle_unique):
-        if df.empty:
+        if df.empty and len(df.columns) == 0:
             st.info(f"La table {nom_table} est vide.")
             return
             
-        # On ajoute une colonne de cases à cocher au tout début
-        df_edit = df.copy()
-        df_edit.insert(0, "Supprimer", False)
-        
         df_modifie = st.data_editor(
-            df_edit,
+            df,
             hide_index=True,
             use_container_width=True,
+            num_rows="dynamic",
             key=f"editor_{cle_unique}"
         )
         
-        # Filtrer pour trouver quelles lignes ont été cochées
-        lignes_a_supprimer = df_modifie[df_modifie["Supprimer"] == True]
-        
-        if not lignes_a_supprimer.empty:
-            if st.button(f"🗑️ Supprimer les {len(lignes_a_supprimer)} ligne(s) sélectionnée(s) dans {nom_table}", type="primary", key=f"btn_{cle_unique}"):
-                with st.spinner(f"Suppression dans {nom_table} en cours..."):
-                    # +2 car l'index Pandas commence à 0 et la ligne 1 de Sheets est l'entête
-                    indices_gsheets = [idx + 2 for idx in lignes_a_supprimer.index.tolist()]
-                    # TRÈS IMPORTANT : Supprimer de bas en haut pour ne pas décaler les index pendant la boucle
-                    indices_gsheets.sort(reverse=True)
-                    
-                    for row_idx in indices_gsheets:
-                        worksheet.delete_rows(row_idx)
+        # Vérification du state interne du data_editor pour capter ajouts, modifs et suppressions
+        if f"editor_{cle_unique}" in st.session_state:
+            changements = st.session_state[f"editor_{cle_unique}"]
+            ajouts = changements.get("added_rows", [])
+            modifs = changements.get("edited_rows", {})
+            suppressions = changements.get("deleted_rows", [])
+            
+            if ajouts or modifs or suppressions:
+                st.warning(f"⚠️ Modifications en attente : {len(ajouts)} ajout(s), {len(modifs)} modification(s), {len(suppressions)} suppression(s).")
+                if st.button(f"💾 Sauvegarder dans {nom_table}", type="primary", key=f"btn_save_{cle_unique}"):
+                    with st.spinner(f"Synchronisation de {nom_table} avec Google Sheets..."):
+                        colonnes = list(df.columns)
                         
-                    charger_donnees.clear()
-                    st.success(f"✅ {len(indices_gsheets)} ligne(s) supprimée(s) avec succès !")
-                    time.sleep(1)
-                    st.rerun()
+                        # 1. Modifications (avant les suppressions pour garder les bons index)
+                        if modifs:
+                            for row_idx, col_changes in modifs.items():
+                                if int(row_idx) in suppressions:
+                                    continue
+                                gs_row = int(row_idx) + 2
+                                for col_name, new_val in col_changes.items():
+                                    if col_name in colonnes:
+                                        gs_col = colonnes.index(col_name) + 1
+                                        worksheet.update_cell(gs_row, gs_col, str(new_val) if new_val is not None else "")
+                                        
+                        # 2. Suppressions (De bas en haut pour ne pas décaler l'index !)
+                        if suppressions:
+                            indices_gsheets = [int(idx) + 2 for idx in suppressions]
+                            indices_gsheets.sort(reverse=True)
+                            for row_idx in indices_gsheets:
+                                worksheet.delete_rows(row_idx)
+                                
+                        # 3. Ajouts
+                        if ajouts:
+                            lignes_a_ajouter = []
+                            for ajout in ajouts:
+                                ligne = [str(ajout.get(col, "")) if ajout.get(col) is not None else "" for col in colonnes]
+                                lignes_a_ajouter.append(ligne)
+                            if lignes_a_ajouter:
+                                worksheet.append_rows(lignes_a_ajouter)
+                                
+                        charger_donnees.clear()
+                        st.success("✅ Synchronisation réussie avec succès !")
+                        time.sleep(1)
+                        st.rerun()
 
     tab_bd_j, tab_bd_p, tab_bd_pres, tab_bd_def = st.tabs(["Joueurs", "Parties", "Présences", "Défense"])
     
