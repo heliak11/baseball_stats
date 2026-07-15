@@ -1051,6 +1051,7 @@ elif choix_menu == "🛠️ Base de données":
                         
                         # 1. Modifications (avant les suppressions pour garder les bons index)
                         if modifs:
+                            cellules_a_maj = []
                             for row_idx, col_changes in modifs.items():
                                 if int(row_idx) in suppressions:
                                     continue
@@ -1058,14 +1059,31 @@ elif choix_menu == "🛠️ Base de données":
                                 for col_name, new_val in col_changes.items():
                                     if col_name in colonnes:
                                         gs_col = colonnes.index(col_name) + 1
-                                        worksheet.update_cell(gs_row, gs_col, str(new_val) if new_val is not None else "")
+                                        cellules_a_maj.append(gspread.Cell(gs_row, gs_col, str(new_val) if new_val is not None else ""))
+                            
+                            if cellules_a_maj:
+                                worksheet.update_cells(cellules_a_maj)
                                         
-                        # 2. Suppressions (De bas en haut pour ne pas décaler l'index !)
+                        # 2. Suppressions (En un seul appel API pour éviter les limites de requêtes)
                         if suppressions:
                             indices_gsheets = [int(idx) + 2 for idx in suppressions]
                             indices_gsheets.sort(reverse=True)
+                            
+                            requetes_suppression = []
                             for row_idx in indices_gsheets:
-                                worksheet.delete_rows(row_idx)
+                                requetes_suppression.append({
+                                    "deleteDimension": {
+                                        "range": {
+                                            "sheetId": worksheet.id,
+                                            "dimension": "ROWS",
+                                            "startIndex": row_idx - 1,
+                                            "endIndex": row_idx
+                                        }
+                                    }
+                                })
+                            
+                            if requetes_suppression:
+                                sh.batch_update({"requests": requetes_suppression})
                                 
                         # 3. Ajouts
                         if ajouts:
