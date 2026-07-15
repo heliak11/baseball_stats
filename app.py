@@ -888,12 +888,24 @@ elif choix_menu == "⚙️ Gestion":
                     # Pour les parties, on peut chercher par ID ou par nom
                     dict_p_by_id = {str(p.get('id', '')): str(p.get('id', '')) for p in parties_existantes}
                     dict_p_by_name = {str(p.get('equipe_adverse', '')).strip(): p['id'] for p in parties_existantes}
+                    dict_j_exact = {f"{str(j.get('prenom', ''))} {str(j.get('nom', ''))}".strip().lower(): j['id'] for j in joueurs_existants}
+                    dict_j_initial = {}
+                    for j in joueurs_existants:
+                        p = str(j.get('prenom', '')).strip()
+                        n = str(j.get('nom', '')).strip()
+                        if p and n:
+                            dict_j_initial[f"{p[0]} {n}".lower()] = j['id']
                     
                     prochain_id_joueur = len(ws_joueurs.get_all_values())
                     prochain_id_partie = len(ws_parties.get_all_values())
                     prochain_id_presence = len(ws_presences.get_all_values())
+                    dict_p_by_id = {str(p.get('id', '')).strip().lower(): str(p.get('id', '')) for p in parties_existantes}
+                    dict_p_by_name = {str(p.get('equipe_adverse', '')).strip().lower(): p['id'] for p in parties_existantes}
                     
                     nouvelles_presences = []
+                    erreurs_joueurs = set()
+                    erreurs_parties = set()
+                    lignes_valides = []
                     
                     colonnes_actions = {
                         '1B': '1B', '2B': '2B', '3B': '3B', 'CC': 'CC', 
@@ -910,6 +922,7 @@ elif choix_menu == "⚙️ Gestion":
                         nom_partie_brut = str(row['Partie']).strip()
                         
                         if not nom_joueur_brut or not nom_partie_brut or nom_joueur_brut == '0' or nom_partie_brut == '0':
+                        if not nom_joueur_brut or not nom_partie_brut or nom_joueur_brut == '0' or nom_partie_brut == '0' or nom_joueur_brut.lower() == 'nan':
                             continue
                             
                         # Joueur
@@ -920,6 +933,14 @@ elif choix_menu == "⚙️ Gestion":
                             ws_joueurs.append_row([prochain_id_joueur, prenom, nom, 0])
                             dict_j_import[nom_joueur_brut] = prochain_id_joueur
                             prochain_id_joueur += 1
+                        joueur_key = nom_joueur_brut.lower()
+                        joueur_id = None
+                        if joueur_key in dict_j_exact:
+                            joueur_id = dict_j_exact[joueur_key]
+                        elif joueur_key in dict_j_initial:
+                            joueur_id = dict_j_initial[joueur_key]
+                        else:
+                            erreurs_joueurs.add(nom_joueur_brut)
                             
                         joueur_id = dict_j_import[nom_joueur_brut]
                         
@@ -932,6 +953,11 @@ elif choix_menu == "⚙️ Gestion":
                         elif nom_partie_brut in dict_p_by_name:
                             partie_id = dict_p_by_name[nom_partie_brut]
                         # 3. Sinon, on crée une nouvelle partie
+                        partie_key = nom_partie_brut.lower()
+                        if partie_key in dict_p_by_id:
+                            partie_id = dict_p_by_id[partie_key]
+                        elif partie_key in dict_p_by_name:
+                            partie_id = dict_p_by_name[partie_key]
                         else:
                             date_str = str(row.get('Date', '')).strip()
                             try:
@@ -941,9 +967,12 @@ elif choix_menu == "⚙️ Gestion":
                                     date_formatee = datetime.date.today().strftime("%Y-%m-%d")
                             except Exception:
                                 date_formatee = date_str if date_str and date_str != '0' else datetime.date.today().strftime("%Y-%m-%d")
+                            erreurs_parties.add(nom_partie_brut)
                             
                             partie_id = f"P{prochain_id_partie}"
                             ws_parties.append_row([partie_id, date_formatee, nom_partie_brut, "À déterminer", "Saison régulière", "À venir", ""])
+                        if joueur_id and partie_id:
+                            lignes_valides.append((joueur_id, partie_id, row))
                             
                             # On met à jour nos dictionnaires pour les prochaines lignes du même fichier
                             dict_p_by_id[partie_id] = partie_id
@@ -953,11 +982,30 @@ elif choix_menu == "⚙️ Gestion":
                         # Statistiques
                         vols = int(float(row['BV'])) if 'BV' in row and str(row['BV']).replace('.','',1).isdigit() else 0
                         points = int(float(row['RUN'])) if 'RUN' in row and str(row['RUN']).replace('.','',1).isdigit() else 0
+                    if erreurs_joueurs or erreurs_parties:
+                        if erreurs_joueurs:
+                            st.error(f"❌ Joueurs introuvables : {', '.join(erreurs_joueurs)}")
+                            st.info("💡 L'application ne crée plus de joueurs automatiquement. Veuillez d'abord les ajouter dans l'onglet 'Ajouter' ou vérifier l'orthographe dans votre fichier CSV (ex: 'R Gagnon' ou 'René Gagnon').")
+                        if erreurs_parties:
+                            st.error(f"❌ Matchs introuvables : {', '.join(erreurs_parties)}")
+                            st.info("💡 L'application ne crée plus de matchs automatiquement. Veuillez d'abord les ajouter dans l'onglet 'Ajouter' et utiliser leur ID (ex: 'P2') ou l'équipe adverse.")
+                        st.stop()
+                        
+                    nouvelles_presences = []
+                    prochain_id_presence = len(ws_presences.get_all_values())
+                    
+                    for joueur_id, partie_id, row in lignes_valides:
+                        vols = int(float(row['BV'])) if 'BV' in row and str(row['BV']).replace('.', '', 1).isdigit() else 0
+                        points = int(float(row['RUN'])) if 'RUN' in row and str(row['RUN']).replace('.', '', 1).isdigit() else 0
                         
                         rbi = 0
                         if 'PP' in row:
                             try:
                                 rbi = int(float(row['PP']))
+                                val_pp = row['PP']
+                                if isinstance(val_pp, pd.Series):
+                                    val_pp = val_pp.iloc[0]
+                                rbi = int(float(val_pp))
                             except Exception:
                                 pass
                                 
