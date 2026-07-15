@@ -29,10 +29,19 @@ except gspread.WorksheetNotFound:
 # Garde les données en mémoire pendant 10 minutes ou jusqu'à ce qu'on vide le cache manuellement
 @st.cache_data(ttl=600)
 def charger_donnees():
-    df_j = pd.DataFrame(sh.worksheet("joueurs").get_all_records())
-    df_p = pd.DataFrame(sh.worksheet("parties").get_all_records())
-    df_pres = pd.DataFrame(ws_presences.get_all_records())
-    df_def = pd.DataFrame(ws_defense.get_all_records())
+    # Fonction interne pour charger une feuille de manière robuste, évitant l'erreur sur les en-têtes dupliqués.
+    def safe_load_sheet(worksheet):
+        all_values = worksheet.get_all_values()
+        if not all_values:
+            return pd.DataFrame() # Retourne un DataFrame vide si la feuille est vide
+        headers = all_values[0]
+        data = all_values[1:]
+        return pd.DataFrame(data, columns=headers)
+
+    df_j = safe_load_sheet(sh.worksheet("joueurs"))
+    df_p = safe_load_sheet(sh.worksheet("parties"))
+    df_pres = safe_load_sheet(ws_presences)
+    df_def = safe_load_sheet(ws_defense)
     return df_j, df_p, df_pres, df_def
 
 # On appelle la fonction mise en cache (instantané après le 1er chargement !)
