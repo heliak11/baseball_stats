@@ -54,7 +54,23 @@ else:
     dict_joueurs = {}
 
 if not parties_df.empty:
-    noms_parties = parties_df['date_match'].astype(str) + " vs " + parties_df['equipe_adverse'].astype(str) + " (" + parties_df['type_match'].astype(str) + " à " + parties_df['lieu'].astype(str) + ")"
+    if 'resultat' not in parties_df.columns:
+        parties_df['resultat'] = "À venir"
+    if 'pointage' not in parties_df.columns:
+        parties_df['pointage'] = ""
+        
+    def format_nom_partie(row):
+        base = f"{row['date_match']} vs {row['equipe_adverse']} ({row['type_match']} à {row['lieu']})"
+        res = str(row['resultat'])
+        score = str(row['pointage'])
+        if res != 'nan' and res != 'À venir' and res != '':
+            if score != 'nan' and score != '':
+                return f"{base} - {res} [{score}]"
+            else:
+                return f"{base} - {res}"
+        return base
+        
+    noms_parties = parties_df.apply(format_nom_partie, axis=1)
     dict_parties = dict(zip(noms_parties, parties_df['id']))
 else:
     dict_parties = {}
@@ -682,6 +698,12 @@ elif choix_menu == "⚙️ Gestion":
                 lieu = st.text_input("Lieu (ex: Parc Laviolette)")
                 type_match = st.selectbox("Type de match", ["Saison régulière", "Séries", "Tournoi", "Hors-concours"])
                 
+                col_r1, col_r2 = st.columns(2)
+                with col_r1:
+                    resultat = st.selectbox("Résultat", ["À venir", "Victoire (W)", "Défaite (L)", "Égalité (T)", "Annulée"])
+                with col_r2:
+                    pointage = st.text_input("Pointage (ex: 5-3)")
+
                 soumis_match = st.form_submit_button("Créer le match", type="primary", use_container_width=True)
                 
                 if soumis_match:
@@ -689,7 +711,7 @@ elif choix_menu == "⚙️ Gestion":
                         with st.spinner("Création du match..."):
                             ws_parties = sh.worksheet("parties")
                             nouvel_id_p = len(ws_parties.get_all_values())
-                            ws_parties.append_row([nouvel_id_p, str(date_match), equipe_adverse.strip(), lieu.strip(), type_match])
+                            ws_parties.append_row([nouvel_id_p, str(date_match), equipe_adverse.strip(), lieu.strip(), type_match, resultat, pointage.strip()])
                             
                         charger_donnees.clear()
                         st.success(f"✅ Match contre {equipe_adverse} créé !")
@@ -715,12 +737,26 @@ elif choix_menu == "⚙️ Gestion":
                 current_type = str(m_row['type_match'])
                 type_index = types_match.index(current_type) if current_type in types_match else 0
                 
+                resultats_possibles = ["À venir", "Victoire (W)", "Défaite (L)", "Égalité (T)", "Annulée"]
+                current_resultat = str(m_row.get('resultat', 'À venir'))
+                if current_resultat == 'nan' or current_resultat == '': current_resultat = 'À venir'
+                res_index = resultats_possibles.index(current_resultat) if current_resultat in resultats_possibles else 0
+                
+                current_pointage = str(m_row.get('pointage', ''))
+                if current_pointage == 'nan': current_pointage = ''
+
                 with st.form("form_modif_match"):
                     nouvelle_date = st.date_input("Date du match", value=current_date)
                     nouvelle_equipe = st.text_input("Équipe adverse", value=str(m_row['equipe_adverse']))
                     nouveau_lieu = st.text_input("Lieu", value=str(m_row['lieu']))
                     nouveau_type = st.selectbox("Type de match", types_match, index=type_index)
                     
+                    col_r1, col_r2 = st.columns(2)
+                    with col_r1:
+                        nouveau_resultat = st.selectbox("Résultat", resultats_possibles, index=res_index)
+                    with col_r2:
+                        nouveau_pointage = st.text_input("Pointage (ex: 5-3)", value=current_pointage)
+
                     soumis_modif_m = st.form_submit_button("Enregistrer les modifications", type="primary", use_container_width=True)
                     
                     if soumis_modif_m:
@@ -733,6 +769,8 @@ elif choix_menu == "⚙️ Gestion":
                                 ws_parties.update_cell(row_idx, 3, nouvelle_equipe.strip())
                                 ws_parties.update_cell(row_idx, 4, nouveau_lieu.strip())
                                 ws_parties.update_cell(row_idx, 5, nouveau_type)
+                                ws_parties.update_cell(row_idx, 6, nouveau_resultat)
+                                ws_parties.update_cell(row_idx, 7, nouveau_pointage.strip())
                                 
                             charger_donnees.clear()
                             st.success(f"✅ Match modifié avec succès !")
