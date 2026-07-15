@@ -10,18 +10,26 @@ st.title("⚾ Tableau de Bord Midget")
 # ---------------------------------------------------------
 # Connexion à Google Sheets
 # ---------------------------------------------------------
-# Se connecte en utilisant les "Secrets" de Streamlit
-gc = gspread.service_account_from_dict(st.secrets["gcp_service_account"])
-# Ouvre le fichier via son lien (remplace par ton URL)
-sh = gc.open_by_url("https://docs.google.com/spreadsheets/d/1mDPEcK9zRMKj7YZLqI1Q1Q9AeTjUGlIHl13jnfaIkF4/edit?gid=0#gid=0")
+@st.cache_resource
+def init_connection():
+    # Se connecte en utilisant les "Secrets" de Streamlit
+    gc = gspread.service_account_from_dict(st.secrets["gcp_service_account"])
+    # Ouvre le fichier via son lien
+    sheet = gc.open_by_url("https://docs.google.com/spreadsheets/d/1mDPEcK9zRMKj7YZLqI1Q1Q9AeTjUGlIHl13jnfaIkF4/edit?gid=0#gid=0")
+    
+    w_j = sheet.worksheet("joueurs")
+    w_p = sheet.worksheet("parties")
+    w_pres = sheet.worksheet("presences")
+    
+    try:
+        w_def = sheet.worksheet("defense")
+    except gspread.WorksheetNotFound:
+        w_def = sheet.add_worksheet(title="defense", rows="1000", cols="8")
+        w_def.append_row(["id", "partie_id", "joueur_id", "manche", "position", "po", "a", "e"])
+        
+    return sheet, w_j, w_p, w_pres, w_def
 
-# On garde la référence de l'onglet des présences pour pouvoir y écrire
-ws_presences = sh.worksheet("presences")
-try:
-    ws_defense = sh.worksheet("defense")
-except gspread.WorksheetNotFound:
-    ws_defense = sh.add_worksheet(title="defense", rows="1000", cols="8")
-    ws_defense.append_row(["id", "partie_id", "joueur_id", "manche", "position", "po", "a", "e"])
+sh, ws_joueurs, ws_parties, ws_presences, ws_defense = init_connection()
 
 # ---------------------------------------------------------
 # Chargement optimisé des données (Mise en cache)
@@ -38,8 +46,8 @@ def charger_donnees():
         data = all_values[1:]
         return pd.DataFrame(data, columns=headers)
 
-    df_j = safe_load_sheet(sh.worksheet("joueurs"))
-    df_p = safe_load_sheet(sh.worksheet("parties"))
+    df_j = safe_load_sheet(ws_joueurs)
+    df_p = safe_load_sheet(ws_parties)
     df_pres = safe_load_sheet(ws_presences)
     df_def = safe_load_sheet(ws_defense)
     return df_j, df_p, df_pres, df_def
@@ -1149,9 +1157,9 @@ elif choix_menu == "🛠️ Base de données":
     tab_bd_j, tab_bd_p, tab_bd_pres, tab_bd_def = st.tabs(["Joueurs", "Parties", "Présences", "Défense"])
     
     with tab_bd_j:
-        afficher_et_gerer_table("Joueurs", joueurs_df, sh.worksheet("joueurs"), "bd_j")
+        afficher_et_gerer_table("Joueurs", joueurs_df, ws_joueurs, "bd_j")
     with tab_bd_p:
-        afficher_et_gerer_table("Parties", parties_df, sh.worksheet("parties"), "bd_p")
+        afficher_et_gerer_table("Parties", parties_df, ws_parties, "bd_p")
     with tab_bd_pres:
         afficher_et_gerer_table("Présences", presences_df, ws_presences, "bd_pres")
     with tab_bd_def:
