@@ -77,7 +77,7 @@ def afficher_legende():
         | **K / ꓘ** | Retrait sur des prises | ❌ Non |  Oui |
         | **6-3 / F8 (etc.)** | Retrait défensif | ❌ Non |  Oui |
         """)
-        st.caption("📌 **Rappel des positions :** 1=Lanceur (P), 2=Receveur (C), 3=1er but (1B), 4=2e but (2B), 5=3e but (3B), 6=Arrêt-court (SS), 7=Champ gauche (LF), 8=Champ centre (CF), 9=Champ droit (RF), DH=Frappeur de choix.")
+        st.caption("📌 **Rappel des positions :** 1=Lanceur (P), 2=Receveur (C), 3=1er but (1B), 4=2e but (2B), 5=3e but (3B), 6=Arrêt-court (SS), 7=Champ gauche (LF), 8=Champ centre (CF), 9=Champ droit (RF), DH=Frappeur de choix, B=Banc.")
         
         st.markdown("---")
         st.write("**Abréviations des statistiques**")
@@ -311,7 +311,7 @@ if choix_menu == "⚾ Grille de Match":
                         except ValueError:
                             pass
                             
-            options_pos = ["", "1", "2", "3", "4", "5", "6", "7", "8", "9", "DH"]
+            options_pos = ["", "1", "2", "3", "4", "5", "6", "7", "8", "9", "DH", "B"]
             col_config_def = {"Joueur": st.column_config.Column(disabled=True)}
             for i in range(1, 10):
                 col_config_def[f"M{i}"] = st.column_config.SelectboxColumn(label=str(i), options=options_pos, width="small")
