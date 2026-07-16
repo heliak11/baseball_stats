@@ -1,0 +1,16 @@
+# Fichiers de secrets Google
+*.json
+
+# Fichiers de base de données
+*.db
+
+# Fichiers de backup
+*.backup
+
+# Ignorer tous les fichiers .txt...
+*.txt
+# ...SAUF requirements.txt
+!requirements.txt
+
+# Ignorer le fichier de secrets Streamlit
+.streamlit/secrets.toml
