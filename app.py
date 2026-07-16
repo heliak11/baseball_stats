@@ -690,8 +690,7 @@ elif choix_menu == "📸 Analyse IA":
                     try:
                         # Configuration de l'API avec le secret
                         genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-                        model = genai.GenerativeModel('gemini-1.5-flash')
-                        model = genai.GenerativeModel('gemini-1.5-flash-latest')
+                        model = genai.GenerativeModel('gemini-1.5-pro')
                         
                         prompt_sys = """
                         Tu es un expert en baseball (Baseball Québec).
