@@ -697,6 +697,9 @@ elif choix_menu == "📸 Analyse IA":
                         
                         nom_modele = None
                         modeles_preferes = [
+                            'models/gemini-2.5-pro',
+                            'models/gemini-2.5-flash',
+                            'models/gemini-2.0-flash',
                             'models/gemini-1.5-pro',
                             'models/gemini-1.5-pro-latest',
                             'models/gemini-1.5-flash',
