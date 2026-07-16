@@ -496,6 +496,8 @@ elif choix_menu == "📊 Journal & Stats":
         df_presences['Est_FA'] = (df_presences['Action'] == 'FA').astype(int)
         df_presences['Est_KE'] = (df_presences['Action'] == 'KE').astype(int)
         df_presences['Est_KD'] = (df_presences['Action'] == 'KD').astype(int)
+        df_presences['Est_FO'] = (df_presences['Action'] == 'FO').astype(int)
+        df_presences['Est_GO'] = (df_presences['Action'] == 'GO').astype(int)
         
         df_presences['Est_H'] = df_presences['Est_1B'] + df_presences['Est_2B'] + df_presences['Est_3B'] + df_presences['Est_CC']
         # Un AB est une présence au marbre qui ne se termine PAS par un BB, FA, ou un sacrifice.
@@ -514,6 +516,8 @@ elif choix_menu == "📊 Journal & Stats":
             FA=('Est_FA', 'sum'),
             KE=('Est_KE', 'sum'),
             KD=('Est_KD', 'sum'),
+            FO=('Est_FO', 'sum'),
+            GO=('Est_GO', 'sum'),
             Points=('Points', 'sum'),
             RBI=('RBI', 'sum'),
             Buts_Voles=('Vols', 'sum')
@@ -521,6 +525,9 @@ elif choix_menu == "📊 Journal & Stats":
         
         # 3. Calculer les statistiques avancées
         stats_joueurs['K'] = stats_joueurs['KE'] + stats_joueurs['KD']
+        
+        # CT% : Pourcentage de contact = (AB - K) / AB
+        stats_joueurs['CT%'] = stats_joueurs.apply(lambda row: (row['AB'] - row['K']) / row['AB'] if row['AB'] > 0 else 0.0, axis=1)
         
         # TB : Total des buts (Total Bases)
         stats_joueurs['TB'] = stats_joueurs['S'] + (2 * stats_joueurs['D']) + (3 * stats_joueurs['T']) + (4 * stats_joueurs['CC'])
@@ -545,7 +552,7 @@ elif choix_menu == "📊 Journal & Stats":
             else:
                 return f"{val_arrondie:.3f}".replace('0.', '.')
 
-        for col in ['AVG', 'OBP', 'SLG', 'OPS']:
+        for col in ['AVG', 'OBP', 'SLG', 'OPS', 'CT%']:
             stats_joueurs[f'{col}_Format'] = stats_joueurs[col].apply(formater_moyenne)
         
         # ---------------------------------------------------------
@@ -575,6 +582,7 @@ elif choix_menu == "📊 Journal & Stats":
             'Présence sur les buts (OBP)': 'OBP',
             'Puissance (SLG)': 'SLG',
             'OPS (OBP + SLG)': 'OPS',
+            'Pourcentage de contact (CT%)': 'CT%',
             'Coups sûrs (H)': 'H',
             'Points produits (RBI)': 'RBI',
             'Points marqués (R)': 'Points',
@@ -597,32 +605,27 @@ elif choix_menu == "📊 Journal & Stats":
         
         # On renomme et ordonne les colonnes pour l'affichage final
         df_affichage_stats = stats_joueurs[[
-            'Joueur', 'PA', 'AB', 'Points', 'H', 'D', 'T', 'CC', 'RBI', 'BB', 'K', 'KE', 'KD', 'Buts_Voles',
-            'AVG_Format', 'OBP_Format', 'SLG_Format', 'OPS_Format'
+            'Joueur', 'AVG_Format', 'SLG_Format', 'OBP_Format', 'OPS_Format', 'CT%_Format', 
+            'S', 'D', 'T', 'CC', 'H', 'KE', 'KD', 'K', 'FO', 'GO', 'BB', 'FA', 
+            'Buts_Voles', 'Points', 'PA', 'AB', 'RBI'
         ]].rename(
             columns={
-                'PA': 'PA',
-                'AB': 'AB',
-                'Points': 'R',
-                'H': 'H',
+                'Joueur': 'Nom du joueur',
+                'AVG_Format': 'AVG',
+                'SLG_Format': 'SLG',
+                'OBP_Format': 'OBP',
+                'OPS_Format': 'OPS',
+                'CT%_Format': 'CT%',
+                'S': '1B',
                 'D': '2B',
                 'T': '3B',
-                'CC': 'HR',
-                'RBI': 'RBI',
-                'BB': 'BB',
-                'K': 'K',
-                'KE': 'KE',
-                'KD': 'KD',
-                'Buts_Voles': 'SB',
-                'AVG_Format': 'AVG',
-                'OBP_Format': 'OBP',
-                'SLG_Format': 'SLG',
-                'OPS_Format': 'OPS'
+                'H': 'Hit',
+                'FA': 'HBP',
+                'Buts_Voles': 'BV',
+                'Points': 'Point',
+                'RBI': 'PP'
             }
         )
-        
-        # Ajouter une colonne "Rang" au tout début (1, 2, 3...)
-        df_affichage_stats.insert(0, 'Rang', range(1, len(df_affichage_stats) + 1))
         
         st.dataframe(df_affichage_stats, use_container_width=True, hide_index=True)
         
