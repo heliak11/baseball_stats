@@ -4,8 +4,8 @@ import gspread
 import time
 import datetime
 
-st.set_page_config(page_title="Baseball Midget - Stats", page_icon="⚾", layout="centered")
-st.title("⚾ Tableau de Bord Midget")
+st.set_page_config(page_title="Cardinals de J-J - Stats", page_icon="⚾", layout="centered")
+st.title("⚾ Tableau de bord des Cardinals de J-J")
 
 # ---------------------------------------------------------
 # Connexion à Google Sheets
@@ -278,7 +278,8 @@ if choix_menu == "📊 Journal & Stats":
         # Affichage des tableaux dans Streamlit
         # ---------------------------------------------------------
         
-        st.subheader(" Comparaison et Classement")
+        st.subheader("📊 Comparaison et Classement Interactif")
+        st.info("💡 **Astuce :** Le graphique et le tableau ci-dessous sont liés. Choisissez une statistique dans le menu déroulant pour les mettre à jour simultanément !")
         
         metrics_dispo = {
             'Moyenne au bâton (AVG)': 'AVG',
@@ -294,7 +295,7 @@ if choix_menu == "📊 Journal & Stats":
             'Retraits sur prises (K)': 'K'
         }
         
-        stat_label = st.selectbox("Sélectionnez une statistique pour le graphique et le classement :", list(metrics_dispo.keys()))
+        stat_label = st.selectbox("👉 Sélectionnez la statistique à analyser :", list(metrics_dispo.keys()))
         stat_col = metrics_dispo[stat_label]
         
         # 1. Trier les données numériques brutes pour le graphique et le classement
