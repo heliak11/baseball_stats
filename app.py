@@ -77,7 +77,7 @@ if not parties_df.empty:
         parties_df['pointage'] = ""
         
     def format_nom_partie(row):
-        base = f"{row['date_match']} vs {row['equipe_adverse']} ({row['type_match']} à {row['lieu']})"
+        base = f"({row['id']}) {row['date_match']} vs {row['equipe_adverse']} ({row['type_match']} à {row['lieu']})"
         res = str(row['resultat'])
         score = str(row['pointage'])
         if res != 'nan' and res != 'À venir' and res != '':
@@ -675,8 +675,15 @@ elif choix_menu == "⚙️ Gestion":
                 if soumis_joueur:
                     if prenom.strip() and nom.strip():
                         with st.spinner("Enregistrement du joueur..."):
-                            ws_joueurs = sh.worksheet("joueurs")
-                            nouvel_id_j = len(ws_joueurs.get_all_values())
+                            # Logique robuste pour trouver le prochain ID de joueur
+                            max_id = 0
+                            if not joueurs_df.empty and 'id' in joueurs_df.columns:
+                                # Convertit la colonne 'id' en nombres, ignore les erreurs, et trouve le max
+                                numeric_ids = pd.to_numeric(joueurs_df['id'], errors='coerce').dropna()
+                                if not numeric_ids.empty:
+                                    max_id = numeric_ids.max()
+                            nouvel_id_j = int(max_id) + 1
+                            
                             ws_joueurs.append_row([nouvel_id_j, prenom.strip(), nom.strip(), numero])
                             
                         charger_donnees.clear()
@@ -765,9 +772,18 @@ elif choix_menu == "⚙️ Gestion":
                 if soumis_match:
                     if equipe_adverse.strip():
                         with st.spinner("Création du match..."):
-                            ws_parties = sh.worksheet("parties")
-                            nouvel_id_p = len(ws_parties.get_all_values())
-                            ws_parties.append_row([f"P{nouvel_id_p}", date_match.strftime("%Y-%m-%d"), equipe_adverse.strip(), lieu.strip(), type_match, resultat, pointage.strip()])
+                            # Logique robuste pour trouver le prochain ID de match
+                            max_id_num = 0
+                            if not parties_df.empty and 'id' in parties_df.columns:
+                                # Extrait la partie numérique des IDs (ex: 'P12' -> 12, '13' -> 13) et trouve le max
+                                numeric_ids = pd.to_numeric(parties_df['id'].astype(str).str.replace(r'\D', '', regex=True), errors='coerce').dropna()
+                                if not numeric_ids.empty:
+                                    max_id_num = numeric_ids.max()
+                            
+                            nouvel_id_num = int(max_id_num) + 1
+                            nouvel_id_p = f"P{nouvel_id_num}"
+
+                            ws_parties.append_row([nouvel_id_p, date_match.strftime("%Y-%m-%d"), equipe_adverse.strip(), lieu.strip(), type_match, resultat, pointage.strip()])
                             
                         charger_donnees.clear()
                         st.success(f"✅ Match contre {equipe_adverse} créé !")
