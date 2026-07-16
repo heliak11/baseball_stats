@@ -155,9 +155,27 @@ if choix_menu == "📊 Journal & Stats":
     
     if not presences_df.empty and not joueurs_df.empty and not parties_df.empty:
         st.subheader("🔍 Filtres")
-        types_p = parties_df['type_match'].dropna().astype(str).unique()
-        types_disponibles = ["Tous les matchs"] + sorted([t for t in types_p if t.strip() != ""])
-        filtre_type = st.selectbox("Filtrer par type de match :", types_disponibles)
+        col_filtre1, col_filtre2 = st.columns(2)
+
+        with col_filtre1:
+            types_p = parties_df['type_match'].dropna().astype(str).unique()
+            types_disponibles = ["Tous les types"] + sorted([t for t in types_p if t.strip() != ""])
+            filtre_type = st.selectbox("Filtrer par type :", types_disponibles)
+
+        # Filtrer les parties disponibles pour le deuxième menu déroulant
+        if filtre_type != "Tous les types":
+            parties_filtrees = parties_df[parties_df['type_match'] == filtre_type]
+        else:
+            parties_filtrees = parties_df
+
+        with col_filtre2:
+            if not parties_filtrees.empty:
+                noms_parties_filtrees = parties_filtrees.apply(format_nom_partie, axis=1).tolist()
+            else:
+                noms_parties_filtrees = []
+            
+            options_matchs = ["Tous les matchs"] + sorted(noms_parties_filtrees)
+            filtre_match = st.selectbox("Filtrer par match :", options_matchs)
         
         # Fusion Pandas pour remplacer la requête SQL
         df_merged = pd.merge(presences_df, joueurs_df, left_on='joueur_id', right_on='id')
@@ -168,8 +186,14 @@ if choix_menu == "📊 Journal & Stats":
         parties_df_safe['id_str'] = parties_df_safe['id'].astype(str)
         df_merged = pd.merge(df_merged, parties_df_safe[['id_str', 'type_match']], left_on='partie_id_str', right_on='id_str', how='left')
         
-        if filtre_type != "Tous les matchs":
+        # Appliquer les filtres
+        if filtre_type != "Tous les types":
             df_merged = df_merged[df_merged['type_match'] == filtre_type]
+        
+        if filtre_match != "Tous les matchs":
+            partie_id_filtree = dict_parties.get(filtre_match)
+            if partie_id_filtree:
+                df_merged = df_merged[df_merged['partie_id'].astype(str) == str(partie_id_filtree)]
             
         if df_merged.empty:
             st.info(f"ℹ️ Aucune donnée enregistrée pour les matchs de type : {filtre_type}.")
@@ -342,19 +366,6 @@ if choix_menu == "📊 Journal & Stats":
             mime='text/csv',
         )
 
-        # Section B : Journal historique des jeux
-        st.subheader("📋 Journal historique des jeux")
-        st.dataframe(df_presences[['Joueur', 'Action', 'Points', 'RBI', 'Vols']], use_container_width=True, hide_index=True)
-        
-        # Bouton d'exportation CSV pour le journal
-        csv_journal = df_presences[['Joueur', 'Action', 'Points', 'RBI', 'Vols']].to_csv(index=False).encode('utf-8-sig')
-        st.download_button(
-            label="📥 Télécharger le journal des présences (CSV)",
-            data=csv_journal,
-            file_name='journal_presences_midget.csv',
-            mime='text/csv',
-        )
-        
     else:
         st.info("Aucune donnée enregistrée pour le moment. Allez à l'onglet Saisie pour enregistrer votre premier match !")
 
