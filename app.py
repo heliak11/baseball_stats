@@ -3,9 +3,12 @@ import pandas as pd
 import gspread
 import time
 import datetime
+import json
+import google.generativeai as genai
+from PIL import Image
 
-st.set_page_config(page_title="Cardinals de J-J - Stats", page_icon="⚾", layout="centered")
-st.title("⚾ Tableau de bord des Cardinals de J-J")
+st.set_page_config(page_title="Baseball Midget - Stats", page_icon="⚾", layout="centered")
+st.title("⚾ Tableau de Bord Midget")
 
 # ---------------------------------------------------------
 # Connexion à Google Sheets
@@ -145,7 +148,7 @@ def afficher_legende():
 # Interface Utilisateur : Navigation
 # ---------------------------------------------------------
 st.sidebar.title("Navigation")
-choix_menu = st.sidebar.radio("Aller vers :", ["📊 Journal & Stats", "⚾ Grille de Match", "⚙️ Gestion", "🛠️ Base de données"])
+choix_menu = st.sidebar.radio("Aller vers :", ["📊 Journal & Stats", "⚾ Grille de Match", "📸 Analyse IA", "⚙️ Gestion", "🛠️ Base de données"])
 
 # --- PAGE 1 : JOURNAL & STATS ---
 if choix_menu == "📊 Journal & Stats":
@@ -155,27 +158,9 @@ if choix_menu == "📊 Journal & Stats":
     
     if not presences_df.empty and not joueurs_df.empty and not parties_df.empty:
         st.subheader("🔍 Filtres")
-        col_filtre1, col_filtre2 = st.columns(2)
-
-        with col_filtre1:
-            types_p = parties_df['type_match'].dropna().astype(str).unique()
-            types_disponibles = ["Tous les types"] + sorted([t for t in types_p if t.strip() != ""])
-            filtre_type = st.selectbox("Filtrer par type :", types_disponibles)
-
-        # Filtrer les parties disponibles pour le deuxième menu déroulant
-        if filtre_type != "Tous les types":
-            parties_filtrees = parties_df[parties_df['type_match'] == filtre_type]
-        else:
-            parties_filtrees = parties_df
-
-        with col_filtre2:
-            if not parties_filtrees.empty:
-                noms_parties_filtrees = parties_filtrees.apply(format_nom_partie, axis=1).tolist()
-            else:
-                noms_parties_filtrees = []
-            
-            options_matchs = ["Tous les matchs"] + sorted(noms_parties_filtrees)
-            filtre_match = st.selectbox("Filtrer par match :", options_matchs)
+        types_p = parties_df['type_match'].dropna().astype(str).unique()
+        types_disponibles = ["Tous les matchs"] + sorted([t for t in types_p if t.strip() != ""])
+        filtre_type = st.selectbox("Filtrer par type de match :", types_disponibles)
         
         # Fusion Pandas pour remplacer la requête SQL
         df_merged = pd.merge(presences_df, joueurs_df, left_on='joueur_id', right_on='id')
@@ -186,14 +171,8 @@ if choix_menu == "📊 Journal & Stats":
         parties_df_safe['id_str'] = parties_df_safe['id'].astype(str)
         df_merged = pd.merge(df_merged, parties_df_safe[['id_str', 'type_match']], left_on='partie_id_str', right_on='id_str', how='left')
         
-        # Appliquer les filtres
-        if filtre_type != "Tous les types":
+        if filtre_type != "Tous les matchs":
             df_merged = df_merged[df_merged['type_match'] == filtre_type]
-        
-        if filtre_match != "Tous les matchs":
-            partie_id_filtree = dict_parties.get(filtre_match)
-            if partie_id_filtree:
-                df_merged = df_merged[df_merged['partie_id'].astype(str) == str(partie_id_filtree)]
             
         if df_merged.empty:
             st.info(f"ℹ️ Aucune donnée enregistrée pour les matchs de type : {filtre_type}.")
@@ -302,8 +281,7 @@ if choix_menu == "📊 Journal & Stats":
         # Affichage des tableaux dans Streamlit
         # ---------------------------------------------------------
         
-        st.subheader("📊 Comparaison et Classement Interactif")
-        st.info("💡 **Astuce :** Le graphique et le tableau ci-dessous sont liés. Choisissez une statistique dans le menu déroulant pour les mettre à jour simultanément !")
+        st.subheader(" Comparaison et Classement")
         
         metrics_dispo = {
             'Moyenne au bâton (AVG)': 'AVG',
@@ -319,7 +297,7 @@ if choix_menu == "📊 Journal & Stats":
             'Retraits sur prises (K)': 'K'
         }
         
-        stat_label = st.selectbox("👉 Sélectionnez la statistique à analyser :", list(metrics_dispo.keys()))
+        stat_label = st.selectbox("Sélectionnez une statistique pour le graphique et le classement :", list(metrics_dispo.keys()))
         stat_col = metrics_dispo[stat_label]
         
         # 1. Trier les données numériques brutes pour le graphique et le classement
@@ -366,6 +344,19 @@ if choix_menu == "📊 Journal & Stats":
             mime='text/csv',
         )
 
+        # Section B : Journal historique des jeux
+        st.subheader("📋 Journal historique des jeux")
+        st.dataframe(df_presences[['Joueur', 'Action', 'Points', 'RBI', 'Vols']], use_container_width=True, hide_index=True)
+        
+        # Bouton d'exportation CSV pour le journal
+        csv_journal = df_presences[['Joueur', 'Action', 'Points', 'RBI', 'Vols']].to_csv(index=False).encode('utf-8-sig')
+        st.download_button(
+            label="📥 Télécharger le journal des présences (CSV)",
+            data=csv_journal,
+            file_name='journal_presences_midget.csv',
+            mime='text/csv',
+        )
+        
     else:
         st.info("Aucune donnée enregistrée pour le moment. Allez à l'onglet Saisie pour enregistrer votre premier match !")
 
@@ -667,7 +658,151 @@ elif choix_menu == "⚾ Grille de Match":
                 else:
                     st.info("ℹ️ Aucune modification détectée pour la défensive.")
 
-# --- ONGLET 3 : GESTION (AJOUT DE JOUEURS ET MATCHS) ---
+# --- PAGE 3 : ANALYSE IA DE FEUILLE DE POINTAGE ---
+elif choix_menu == "📸 Analyse IA":
+    st.header("📸 Analyse IA de Feuille de Pointage")
+    st.write("Prenez en photo ou téléversez une feuille de pointage manuscrite pour numériser automatiquement les actions offensives avec Gemini.")
+    
+    afficher_legende()
+    
+    if not dict_joueurs or not dict_parties:
+        st.warning("Vos onglets Google Sheets (Joueurs ou Parties) sont vides.")
+    else:
+        partie_choisie = st.selectbox("Associer ces statistiques à quel match ?", list(dict_parties.keys()), key="select_match_ia")
+        
+        col_img1, col_img2 = st.columns(2)
+        with col_img1:
+            methode = st.radio("Source de l'image :", ["Téléverser un fichier", "Prendre une photo"])
+        
+        img_file = None
+        with col_img2:
+            if methode == "Téléverser un fichier":
+                img_file = st.file_uploader("Sélectionnez votre image", type=['png', 'jpg', 'jpeg'])
+            else:
+                img_file = st.camera_input("📸 Prenez la feuille en photo")
+                
+        if img_file is not None:
+            image = Image.open(img_file)
+            st.image(image, caption="Aperçu de la feuille de pointage", use_container_width=True)
+            
+            if st.button("🧠 Décoder avec Gemini", type="primary", use_container_width=True):
+                with st.spinner("Analyse approfondie de la feuille par l'IA... (cela peut prendre quelques secondes)"):
+                    try:
+                        # Configuration de l'API avec le secret
+                        genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+                        model = genai.GenerativeModel('gemini-1.5-flash')
+                        
+                        prompt_sys = """
+                        Tu es un expert en baseball (Baseball Québec).
+                        Analyse attentivement cette feuille de pointage manuscrite et extrais toutes les actions offensives de chaque joueur.
+                        
+                        Renvoie UNIQUEMENT un tableau JSON strict sans AUCUN texte supplémentaire, ni markdown, ni bloc de code.
+                        Le JSON doit être une liste d'objets avec ces clés exactes :
+                        [
+                            {
+                                "Joueur_Lu": "Nom tel qu'écrit sur la feuille",
+                                "Manche": 1,
+                                "Action": "1B",
+                                "Points": 0,
+                                "RBI": 0,
+                                "Vols": 0
+                            }
+                        ]
+                        Les valeurs pour la clé "Action" doivent obligatoirement être parmi : 1B, 2B, 3B, CC, KE, KD, FO, GO, SAC, E, FC, BB, FA, ou vide ("").
+                        Déduis le numéro de la "Manche" en fonction des colonnes numérotées du tableau.
+                        S'il y a des points produits (PP/RBI), points marqués (RUN/R) ou buts volés (BV/SB), ajoute-les en nombres entiers.
+                        """
+                        
+                        reponse = model.generate_content([prompt_sys, image])
+                        
+                        # Nettoyage robuste pour assurer un JSON valide
+                        texte_nettoye = reponse.text.replace('```json', '').replace('```', '').strip()
+                        donnees_ia = json.loads(texte_nettoye)
+                        
+                        # Préparation des données pour Streamlit en essayant de lier au "dict_joueurs"
+                        pour_dataframe = []
+                        for d in donnees_ia:
+                            nom_lu = str(d.get("Joueur_Lu", "")).lower()
+                            joueur_match = None
+                            
+                            # Tentative de match approximatif (best-effort)
+                            for k in dict_joueurs.keys():
+                                nom_sans_num = k.split("(")[0].strip().lower()
+                                if nom_sans_num in nom_lu or nom_lu in nom_sans_num:
+                                    joueur_match = k
+                                    break
+                                    
+                            pour_dataframe.append({
+                                "Joueur": joueur_match, # Trouvé automatiquement ou None
+                                "Nom détecté (IA)": d.get("Joueur_Lu", ""),
+                                "Manche": int(d.get("Manche", 1)),
+                                "Action": d.get("Action", ""),
+                                "Points": int(d.get("Points", 0)),
+                                "RBI": int(d.get("RBI", 0)),
+                                "Vols": int(d.get("Vols", 0))
+                            })
+                        
+                        st.session_state['donnees_ia'] = pd.DataFrame(pour_dataframe)
+                        st.success("✅ Extraction réussie ! Veuillez valider les données ci-dessous.")
+                    except Exception as e:
+                        st.error(f"❌ Erreur lors de l'analyse ou du décodage de l'image : {e}")
+                        
+        if 'donnees_ia' in st.session_state:
+            st.divider()
+            st.subheader("🧐 Validation et Corrections")
+            st.write("L'IA a fait de son mieux. Veuillez vérifier les joueurs assignés, les manches et les actions, puis corrigez-les au besoin avant l'enregistrement final.")
+            
+            df_ia = st.session_state['donnees_ia']
+            
+            options_actions = ["", "1B", "2B", "3B", "CC", "BB", "FA", "SAC", "KE", "KD", "E", "FC", "GO", "FO"]
+            col_config_ia = {
+                "Joueur": st.column_config.SelectboxColumn("Joueur assigné", options=list(dict_joueurs.keys()), required=True),
+                "Nom détecté (IA)": st.column_config.Column("Nom lu par l'IA", disabled=True),
+                "Manche": st.column_config.NumberColumn("Manche", min_value=1, max_value=9, step=1, required=True),
+                "Action": st.column_config.SelectboxColumn("Action", options=options_actions),
+                "Points": st.column_config.NumberColumn("Points", min_value=0, step=1),
+                "RBI": st.column_config.NumberColumn("RBI", min_value=0, step=1),
+                "Vols": st.column_config.NumberColumn("Vols", min_value=0, step=1)
+            }
+            
+            df_valide = st.data_editor(df_ia, column_config=col_config_ia, use_container_width=True, num_rows="dynamic", key="editor_ia")
+            
+            if st.button("💾 Enregistrer dans Google Sheets", type="primary", use_container_width=True):
+                with st.spinner("Sauvegarde vers Google Sheets..."):
+                    partie_id_sel = dict_parties[partie_choisie]
+                    prochain_id_p = len(ws_presences.get_all_values())
+                    lignes_a_pousser = []
+                    
+                    for _, row in df_valide.iterrows():
+                        # Si le coach n'a pas assigné le joueur manuellement, on ignore
+                        if pd.isna(row["Joueur"]) or str(row["Joueur"]).strip() == "":
+                            st.warning(f"⚠️ Action ignorée pour le joueur '{row['Nom détecté (IA) भी']}' car aucun joueur n'a été assigné dans la première colonne.")
+                            continue
+                            
+                        j_id = dict_joueurs[row["Joueur"]]
+                        
+                        lignes_a_pousser.append([
+                            prochain_id_p,
+                            partie_id_sel,
+                            j_id,
+                            int(row["Manche"]),
+                            str(row["Action"]) if not pd.isna(row["Action"]) else "",
+                            int(row["Points"]) if not pd.isna(row["Points"]) else 0,
+                            int(row["RBI"]) if not pd.isna(row["RBI"]) else 0,
+                            int(row["Vols"]) if not pd.isna(row["Vols"]) else 0
+                        ])
+                        prochain_id_p += 1
+                        
+                    if lignes_a_pousser:
+                        ws_presences.append_rows(lignes_a_pousser)
+                        del st.session_state['donnees_ia']  # On vide la session
+                        charger_donnees.clear()
+                        st.success(f"✅ {len(lignes_a_pousser)} présences enregistrées avec succès pour le match !")
+                        time.sleep(2)
+                        st.rerun()
+                    else:
+                        st.info("ℹ️ Aucune ligne valide à enregistrer.")
+
 # --- PAGE 3 : GESTION (AJOUT DE JOUEURS ET MATCHS) ---
 elif choix_menu == "⚙️ Gestion":
     st.header("Gestion de l'équipe et des matchs")
@@ -1079,7 +1214,6 @@ elif choix_menu == "⚙️ Gestion":
             else:
                 st.error("❌ Action annulée : Veuillez taper 'SUPPRIMER' en majuscules pour confirmer.")
 
-# --- ONGLET 4 : BASE DE DONNÉES (DEV) ---
 # --- PAGE 4 : BASE DE DONNÉES (DEV) ---
 elif choix_menu == "🛠️ Base de données":
     st.header("🛠️ Visionneuse de Base de données")
