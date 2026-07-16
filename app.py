@@ -692,6 +692,28 @@ elif choix_menu == "📸 Analyse IA":
                         genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
                         model = genai.GenerativeModel('gemini-1.5-pro')
                         
+                        # Détection dynamique du modèle disponible pour cette clé
+                        modeles_dispos = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+                        
+                        nom_modele = None
+                        modeles_preferes = [
+                            'models/gemini-1.5-pro',
+                            'models/gemini-1.5-pro-latest',
+                            'models/gemini-1.5-flash',
+                            'models/gemini-1.5-flash-latest',
+                            'models/gemini-pro-vision'
+                        ]
+                        
+                        for pref in modeles_preferes:
+                            if pref in modeles_dispos:
+                                nom_modele = pref.replace('models/', '')
+                                break
+                                
+                        if not nom_modele:
+                            raise Exception(f"Aucun modèle de vision compatible trouvé. Modèles autorisés pour cette clé : {', '.join(modeles_dispos)}")
+                            
+                        model = genai.GenerativeModel(nom_modele)
+
                         prompt_sys = """
                         Tu es un expert en baseball (Baseball Québec).
                         Analyse attentivement cette feuille de pointage manuscrite et extrais toutes les actions offensives de chaque joueur.
