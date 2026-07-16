@@ -478,6 +478,11 @@ elif choix_menu == "📊 Journal & Stats":
             columns={'code_resultat': 'Action', 'point_marque': 'Points', 'points_produits': 'RBI', 'buts_voles': 'Vols'}
         )
         
+        # S'assurer que les colonnes statistiques sont bien au format numérique (les données de GSheets arrivent en texte)
+        df_presences['Points'] = pd.to_numeric(df_presences['Points'], errors='coerce').fillna(0).astype(int)
+        df_presences['RBI'] = pd.to_numeric(df_presences['RBI'], errors='coerce').fillna(0).astype(int)
+        df_presences['Vols'] = pd.to_numeric(df_presences['Vols'], errors='coerce').fillna(0).astype(int)
+        
         # ---------------------------------------------------------
         # Calcul des statistiques avancées avec Pandas
         # ---------------------------------------------------------
@@ -493,8 +498,6 @@ elif choix_menu == "📊 Journal & Stats":
         df_presences['Est_KD'] = (df_presences['Action'] == 'KD').astype(int)
         
         df_presences['Est_H'] = df_presences['Est_1B'] + df_presences['Est_2B'] + df_presences['Est_3B'] + df_presences['Est_CC']
-        # Assure qu'une présence avec un Action vide (ex: pinch runner avec vols/points) ne compte pas comme un At-Bat officiel (AB)
-        df_presences['Est_AB'] = (~df_presences['Action'].isin(['BB', 'FA', ''])).astype(int)
         # Un AB est une présence au marbre qui ne se termine PAS par un BB, FA, ou un sacrifice.
         df_presences['Est_AB'] = (~df_presences['Action'].isin(['BB', 'FA', 'SAC', ''])).astype(int)
         
