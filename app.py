@@ -135,6 +135,7 @@ def afficher_legende():
         | **OBP** | On-Base Percentage | **Présence sur les buts** ((H + BB + FA) ÷ PA) |
         | **SLG** | Slugging Percentage | **Puissance** (Total des buts obtenus ÷ AB) |
         | **OPS** | On-Base Plus Slugging | **OBP + SLG** (Indice global de performance offensive) |
+        | **CT%** | Contact Percentage | **Pourcentage de contact** ((AB - K) ÷ AB) |
         | **PO** | Putouts | **Retraits** (Défensive : action d'éliminer directement un coureur/frappeur) |
         | **A** | Assists | **Assistances** (Défensive : lancer/relais menant à un retrait) |
         | **E** | Errors | **Erreurs** (Défensive : jeu raté permettant à un joueur d'avancer) |
