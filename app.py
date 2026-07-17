@@ -721,13 +721,14 @@ elif choix_menu == "📸 Analyse IA":
                         prompt_sys = """
                         Tu es un expert en baseball (Baseball Québec).
                         Analyse attentivement cette feuille de pointage manuscrite et extrais toutes les actions offensives de chaque joueur.
+                        Identifie les joueurs UNIQUEMENT par leur numéro de dossard (chandail), ignore les noms pour des raisons de confidentialité.
 
                         Retourne uniquement le texte JSON brut, sans inclure de balises de code Markdown comme ```json au début ou ``` à la fin.
 
                         Le JSON doit être une liste d'objets avec ces clés exactes :
                         [
                             {
-                                "Joueur_Lu": "Nom tel qu'écrit sur la feuille",
+                                "Numero_Joueur": "Numéro du joueur lu sur la feuille",
                                 "Manche": 1,
                                 "Action": "1B",
                                 "Points": 0,
@@ -746,22 +747,26 @@ elif choix_menu == "📸 Analyse IA":
                         texte_nettoye = reponse.text.replace('```json', '').replace('```', '').strip()
                         donnees_ia = json.loads(texte_nettoye)
                         
-                        # Préparation des données pour Streamlit en essayant de lier au "dict_joueurs"
+                        # Préparation des données pour Streamlit en liant via le numéro de joueur
                         pour_dataframe = []
                         for d in donnees_ia:
-                            nom_lu = str(d.get("Joueur_Lu", "")).lower()
+                            numero_lu = str(d.get("Numero_Joueur", "")).strip()
+                            
+                            # Enlever les zéros non significatifs (ex: "05" devient "5")
+                            if numero_lu.isdigit():
+                                numero_lu = str(int(numero_lu))
+                                
                             joueur_match = None
                             
-                            # Tentative de match approximatif (best-effort)
+                            # On cherche le numéro entre parenthèses dans le menu déroulant (ex: "#5)")
                             for k in dict_joueurs.keys():
-                                nom_sans_num = k.split("(")[0].strip().lower()
-                                if nom_sans_num in nom_lu or nom_lu in nom_sans_num:
+                                if f"(#{numero_lu})" in k:
                                     joueur_match = k
                                     break
                                     
                             pour_dataframe.append({
                                 "Joueur": joueur_match, # Trouvé automatiquement ou None
-                                "Nom détecté (IA)": d.get("Joueur_Lu", ""),
+                                "Numéro détecté (IA)": d.get("Numero_Joueur", ""),
                                 "Manche": int(d.get("Manche", 1)),
                                 "Action": d.get("Action", ""),
                                 "Points": int(d.get("Points", 0)),
@@ -788,7 +793,7 @@ elif choix_menu == "📸 Analyse IA":
             options_actions = ["", "1B", "2B", "3B", "CC", "BB", "FA", "SAC", "KE", "KD", "E", "FC", "GO", "FO"]
             col_config_ia = {
                 "Joueur": st.column_config.SelectboxColumn("Joueur assigné", options=list(dict_joueurs.keys()), required=True),
-                "Nom détecté (IA)": st.column_config.Column("Nom lu par l'IA", disabled=True),
+                "Numéro détecté (IA)": st.column_config.Column("Numéro lu par l'IA", disabled=True),
                 "Manche": st.column_config.NumberColumn("Manche", min_value=1, max_value=9, step=1, required=True),
                 "Action": st.column_config.SelectboxColumn("Action", options=options_actions),
                 "Points": st.column_config.NumberColumn("Points", min_value=0, step=1),
@@ -807,7 +812,7 @@ elif choix_menu == "📸 Analyse IA":
                     for _, row in df_valide.iterrows():
                         # Si le coach n'a pas assigné le joueur manuellement, on ignore
                         if pd.isna(row["Joueur"]) or str(row["Joueur"]).strip() == "":
-                            st.warning(f"⚠️ Action ignorée pour le joueur '{row['Nom détecté (IA) भी']}' car aucun joueur n'a été assigné dans la première colonne.")
+                            st.warning(f"⚠️ Action ignorée pour le dossard #{row['Numéro détecté (IA)']} car aucun joueur n'a été assigné dans la première colonne.")
                             continue
                             
                         j_id = dict_joueurs[row["Joueur"]]
