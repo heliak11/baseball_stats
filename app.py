@@ -700,6 +700,11 @@ elif choix_menu == "📸 Analyse IA":
             if st.button("Analyser la feuille avec l'IA", type="primary", use_container_width=True):
                 with st.spinner("Analyse de la feuille en cours par Gemini... Veuillez patienter..."):
                     try:
+                        # OPTIMISATION QUOTA : Réduire la taille de l'image avant l'envoi
+                        # Cela réduit drastiquement le nombre de jetons utilisés (TPM) et évite l'erreur 429
+                        # Conserve les proportions, mais limite la résolution maximale à 1200x1200px
+                        image.thumbnail((1200, 1200))
+                        
                         # Configuration de l'API avec le secret
                         genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
                         model = genai.GenerativeModel('gemini-2.0-flash')
@@ -758,6 +763,11 @@ elif choix_menu == "📸 Analyse IA":
                         st.success("✅ Extraction réussie ! Veuillez valider les données ci-dessous.")
                     except Exception as e:
                         st.error(f"❌ Erreur lors de l'analyse ou du décodage de l'image : {e}")
+                        erreur_str = str(e).lower()
+                        if "429" in erreur_str or "quota" in erreur_str:
+                            st.warning("⏳ Limite de quota atteinte (Erreur 429). L'API gratuite de Google limite le nombre d'analyses à environ 15 par minute. Veuillez patienter une minute avant de réessayer.")
+                        else:
+                            st.error(f"❌ Erreur lors de l'analyse ou du décodage de l'image : {e}")
                         
         if 'donnees_ia' in st.session_state:
             st.divider()
