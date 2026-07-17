@@ -716,7 +716,6 @@ elif choix_menu == "📸 Analyse IA":
                         
                         # Configuration de l'API avec le secret
                         genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-                        model = genai.GenerativeModel('gemini-2.0-flash-lite')
                         model = genai.GenerativeModel('gemini-3.5-flash')
 
                         prompt_sys = """
@@ -773,12 +772,11 @@ elif choix_menu == "📸 Analyse IA":
                         st.session_state['donnees_ia'] = pd.DataFrame(pour_dataframe)
                         st.success("✅ Extraction réussie ! Veuillez valider les données ci-dessous.")
                     except Exception as e:
-                        st.error(f"❌ Erreur lors de l'analyse ou du décodage de l'image : {e}")
                         erreur_str = str(e).lower()
                         if "429" in erreur_str or "quota" in erreur_str:
                             st.warning("⏳ Limite de quota atteinte (Erreur 429). L'API gratuite de Google limite le nombre d'analyses à environ 15 par minute. Veuillez patienter une minute avant de réessayer.")
                         else:
-                            st.error(f"❌ Erreur lors de l'analyse ou du décodage de l'image : {e}")
+                            st.error(f"❌ Une erreur inattendue est survenue lors de l'analyse : {e}")
                         
         if 'donnees_ia' in st.session_state:
             st.divider()
