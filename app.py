@@ -7,6 +7,9 @@ import json
 import google.generativeai as genai
 from PIL import Image
 
+# Connexion avec ta clé API
+genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+
 st.set_page_config(page_title="Cardinals de J-J - Stats", page_icon="⚾", layout="centered")
 st.title("⚾ Tableau de bord des Cardinals de J-J")
 
@@ -702,12 +705,13 @@ elif choix_menu == "📸 Analyse IA":
                     try:
                         # OPTIMISATION QUOTA : Réduire la taille de l'image avant l'envoi
                         # Cela réduit drastiquement le nombre de jetons utilisés (TPM) et évite l'erreur 429
-                        # Conserve les proportions, mais limite la résolution maximale à 1200x1200px
-                        image.thumbnail((1200, 1200))
+                        # Conserve les proportions, mais limite la résolution maximale à 800x800px
+                        image.thumbnail((800, 800))
+                        image = image.convert('RGB') # Retire le canal de transparence pour alléger l'image
                         
                         # Configuration de l'API avec le secret
                         genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-                        model = genai.GenerativeModel('gemini-2.0-flash')
+                        model = genai.GenerativeModel('gemini-2.0-flash-lite')
 
                         prompt_sys = """
                         Tu es un expert en baseball (Baseball Québec).
