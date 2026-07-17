@@ -369,6 +369,49 @@ if choix_menu == "📊 Journal & Stats":
             mime='text/csv',
         )
         
+        # ---------------------------------------------------------
+        # SECTION DE VÉRIFICATION DES CALCULS (DRILL-DOWN)
+        # ---------------------------------------------------------
+        st.divider()
+        st.subheader("🔍 Vérification des calculs par joueur")
+        st.info("💡 Sélectionnez un joueur pour voir le détail de chaque présence au bâton et la décomposition des calculs de ses statistiques.")
+        
+        joueur_selectionne = st.selectbox("Choisir un joueur à inspecter :", stats_joueurs['Joueur'].unique())
+        
+        if joueur_selectionne:
+            # 1. Isoler les données brutes et calculées pour ce joueur
+            details_presences = df_presences[df_presences['Joueur'] == joueur_selectionne]
+            stats_selection = stats_joueurs[stats_joueurs['Joueur'] == joueur_selectionne].iloc[0]
+            
+            st.write(f"**Historique des présences pour {joueur_selectionne} :**")
+            st.dataframe(details_presences[['Action', 'Points', 'RBI', 'Vols']], use_container_width=True, hide_index=True)
+            
+            st.write("**Détail des calculs :**")
+            
+            col_calc1, col_calc2, col_calc3 = st.columns(3)
+            
+            with col_calc1:
+                st.metric("Présences au marbre (PA)", int(stats_selection['PA']))
+                st.metric("Présences officielles (AB)", int(stats_selection['AB']))
+                st.metric("Coups sûrs (H)", int(stats_selection['H']))
+            
+            with col_calc2:
+                st.metric("Buts sur balles (BB)", int(stats_selection['BB']))
+                st.metric("Atteint par un lancer (FA)", int(stats_selection['FA']))
+                st.metric("Retraits sur prises (K)", int(stats_selection['K']))
+
+            with col_calc3:
+                st.write("**Formules appliquées :**")
+                # AVG
+                avg_str = f"**AVG** = H / AB = {stats_selection['H']} / {stats_selection['AB']} = **{stats_selection['AVG_Format']}**"
+                st.markdown(avg_str)
+                # OBP
+                obp_str = f"**OBP** = (H + BB + FA) / PA = ({stats_selection['H']} + {stats_selection['BB']} + {stats_selection['FA']}) / {stats_selection['PA']} = **{stats_selection['OBP_Format']}**"
+                st.markdown(obp_str)
+                # SLG
+                slg_str = f"**SLG** = Total Buts / AB = {stats_selection['TB']} / {stats_selection['AB']} = **{stats_selection['SLG_Format']}**"
+                st.markdown(slg_str)
+
     else:
         st.info("Aucune donnée enregistrée pour le moment. Allez à l'onglet Saisie pour enregistrer votre premier match !")
 
