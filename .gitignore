@@ -17,4 +17,5 @@
 
 # Ignorer les fichiers de données et backups
 *.csv
+*.xlsx
 backup/
