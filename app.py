@@ -699,6 +699,8 @@ elif choix_menu == "📸 Analyse IA":
             
             if st.button("🧠 Décoder avec Gemini", type="primary", use_container_width=True):
                 with st.spinner("Analyse approfondie de la feuille par l'IA... (cela peut prendre quelques secondes)"):
+            if st.button("Analyser la feuille avec l'IA", type="primary", use_container_width=True):
+                with st.spinner("Analyse de la feuille en cours par Gemini... Veuillez patienter..."):
                     try:
                         # Configuration de l'API avec le secret
                         genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
@@ -728,6 +730,7 @@ elif choix_menu == "📸 Analyse IA":
                             raise Exception(f"Aucun modèle de vision compatible trouvé. Modèles autorisés pour cette clé : {', '.join(modeles_dispos)}")
                             
                         model = genai.GenerativeModel(nom_modele)
+                        model = genai.GenerativeModel('gemini-1.5-flash')
 
                         prompt_sys = """
                         Tu es un expert en baseball (Baseball Québec).
