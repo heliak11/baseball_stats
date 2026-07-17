@@ -697,39 +697,11 @@ elif choix_menu == "📸 Analyse IA":
             image = Image.open(img_file)
             st.image(image, caption="Aperçu de la feuille de pointage", use_container_width=True)
             
-            if st.button("🧠 Décoder avec Gemini", type="primary", use_container_width=True):
-                with st.spinner("Analyse approfondie de la feuille par l'IA... (cela peut prendre quelques secondes)"):
             if st.button("Analyser la feuille avec l'IA", type="primary", use_container_width=True):
                 with st.spinner("Analyse de la feuille en cours par Gemini... Veuillez patienter..."):
                     try:
                         # Configuration de l'API avec le secret
                         genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-                        model = genai.GenerativeModel('gemini-1.5-pro')
-                        
-                        # Détection dynamique du modèle disponible pour cette clé
-                        modeles_dispos = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-                        
-                        nom_modele = None
-                        modeles_preferes = [
-                            'models/gemini-2.5-pro',
-                            'models/gemini-2.5-flash',
-                            'models/gemini-2.0-flash',
-                            'models/gemini-1.5-pro',
-                            'models/gemini-1.5-pro-latest',
-                            'models/gemini-1.5-flash',
-                            'models/gemini-1.5-flash-latest',
-                            'models/gemini-pro-vision'
-                        ]
-                        
-                        for pref in modeles_preferes:
-                            if pref in modeles_dispos:
-                                nom_modele = pref.replace('models/', '')
-                                break
-                                
-                        if not nom_modele:
-                            raise Exception(f"Aucun modèle de vision compatible trouvé. Modèles autorisés pour cette clé : {', '.join(modeles_dispos)}")
-                            
-                        model = genai.GenerativeModel(nom_modele)
                         model = genai.GenerativeModel('gemini-1.5-flash')
 
                         prompt_sys = """
