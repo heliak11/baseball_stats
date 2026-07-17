@@ -14,3 +14,7 @@
 
 # Ignorer le fichier de secrets Streamlit
 .streamlit/secrets.toml
+
+# Ignorer les fichiers de données et backups
+*.csv
+backup/
