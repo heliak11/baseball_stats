@@ -714,8 +714,9 @@ elif choix_menu == "📸 Analyse IA":
                         prompt_sys = """
                         Tu es un expert en baseball (Baseball Québec).
                         Analyse attentivement cette feuille de pointage manuscrite et extrais toutes les actions offensives de chaque joueur.
-                        
-                        Renvoie UNIQUEMENT un tableau JSON strict sans AUCUN texte supplémentaire, ni markdown, ni bloc de code.
+
+                        Retourne uniquement le texte JSON brut, sans inclure de balises de code Markdown comme ```json au début ou ``` à la fin.
+
                         Le JSON doit être une liste d'objets avec ces clés exactes :
                         [
                             {
