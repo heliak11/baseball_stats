@@ -7,9 +7,6 @@ import json
 import google.generativeai as genai
 from PIL import Image
 
-# Connexion avec ta clé API
-genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-
 st.set_page_config(page_title="Cardinals de J-J - Stats", page_icon="⚾", layout="centered")
 st.title("⚾ Tableau de bord des Cardinals de J-J")
 
@@ -712,6 +709,7 @@ elif choix_menu == "📸 Analyse IA":
                         # Configuration de l'API avec le secret
                         genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
                         model = genai.GenerativeModel('gemini-2.0-flash-lite')
+                        model = genai.GenerativeModel('gemini-3.5-flash')
 
                         prompt_sys = """
                         Tu es un expert en baseball (Baseball Québec).
