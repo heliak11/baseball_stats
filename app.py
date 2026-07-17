@@ -675,6 +675,14 @@ elif choix_menu == "📸 Analyse IA":
     st.header("📸 Analyse IA de Feuille de Pointage")
     st.write("Prenez en photo ou téléversez une feuille de pointage manuscrite pour numériser automatiquement les actions offensives avec Gemini.")
     
+    st.info("""
+    📸 **Conseils pour une lecture 100% réussie :**
+    1. Pose la feuille bien à plat (pas de plis).
+    2. Prends la photo bien au-dessus (à la verticale).
+    3. Assure-toi qu'il n'y a pas d'ombres sur les cases.
+    4. Rapproche-toi pour que la feuille remplisse tout l'écran !
+    """)
+    
     afficher_legende()
     
     if not dict_joueurs or not dict_parties:
