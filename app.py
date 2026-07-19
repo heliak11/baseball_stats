@@ -733,154 +733,277 @@ elif choix_menu == "📸 Analyse IA":
     else:
         partie_choisie = st.selectbox("Associer ces statistiques à quel match ?", list(dict_parties.keys()), key="select_match_ia")
         
-        col_img1, col_img2 = st.columns(2)
-        with col_img1:
-            methode = st.radio("Source de l'image :", ["Téléverser un fichier", "Prendre une photo"])
-        
-        img_file = None
-        with col_img2:
-            if methode == "Téléverser un fichier":
-                img_file = st.file_uploader("Sélectionnez votre image", type=['png', 'jpg', 'jpeg'])
-            else:
-                img_file = st.camera_input("📸 Prenez la feuille en photo")
-                
-        if img_file is not None:
-            image = Image.open(img_file)
-            st.image(image, caption="Aperçu de la feuille de pointage", use_container_width=True)
-            
-            if st.button("Analyser la feuille avec l'IA", type="primary", use_container_width=True):
-                with st.spinner("Analyse de la feuille en cours par Gemini... Veuillez patienter..."):
-                    try:
-                        # OPTIMISATION QUOTA : Réduire la taille de l'image avant l'envoi
-                        # Cela réduit drastiquement le nombre de jetons utilisés (TPM) et évite l'erreur 429
-                        # Conserve les proportions, mais limite la résolution maximale à 800x800px
-                        image.thumbnail((800, 800))
-                        image = image.convert('RGB') # Retire le canal de transparence pour alléger l'image
-                        
-                        # Configuration de l'API avec le secret
-                        genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-                        model = genai.GenerativeModel('gemini-3.5-flash')
+        onglet_off_ia, onglet_def_ia = st.tabs(["🏏 Offensive", "🧤 Défensive"])
 
-                        prompt_sys = """
-                        Tu es un expert en baseball (Baseball Québec).
-                        Analyse attentivement cette feuille de pointage manuscrite et extrais toutes les actions offensives de chaque joueur.
-                        Identifie les joueurs UNIQUEMENT par leur numéro de dossard (chandail), ignore les noms pour des raisons de confidentialité.
-
-                        Retourne uniquement le texte JSON brut, sans inclure de balises de code Markdown comme ```json au début ou ``` à la fin.
-
-                        Le JSON doit être une liste d'objets avec ces clés exactes :
-                        [
-                            {
-                                "Numero_Joueur": "Numéro du joueur lu sur la feuille",
-                                "Manche": 1,
-                                "Action": "1B",
-                                "Points": 0,
-                                "RBI": 0,
-                                "Vols": 0
-                            }
-                        ]
-                        Les valeurs pour la clé "Action" doivent obligatoirement être parmi : 1B, 2B, 3B, CC, KE, KD, FO, GO, SAC, E, FC, BB, FA, ou vide ("").
-                        Déduis le numéro de la "Manche" en fonction des colonnes numérotées du tableau.
-                        S'il y a des points produits (PP/RBI), points marqués (RUN/R) ou buts volés (BV/SB), ajoute-les en nombres entiers.
-                        """
-                        
-                        reponse = model.generate_content([prompt_sys, image])
-                        
-                        # Nettoyage robuste pour assurer un JSON valide
-                        texte_nettoye = reponse.text.replace('```json', '').replace('```', '').strip()
-                        donnees_ia = json.loads(texte_nettoye)
-                        
-                        # Préparation des données pour Streamlit en liant via le numéro de joueur
-                        pour_dataframe = []
-                        for d in donnees_ia:
-                            numero_lu = str(d.get("Numero_Joueur", "")).strip()
-                            
-                            # Enlever les zéros non significatifs (ex: "05" devient "5")
-                            if numero_lu.isdigit():
-                                numero_lu = str(int(numero_lu))
-                                
-                            joueur_match = None
-                            
-                            # On cherche le numéro entre parenthèses dans le menu déroulant (ex: "#5)")
-                            for k in dict_joueurs.keys():
-                                if f"(#{numero_lu})" in k:
-                                    joueur_match = k
-                                    break
-                                    
-                            pour_dataframe.append({
-                                "Joueur": joueur_match, # Trouvé automatiquement ou None
-                                "Numéro détecté (IA)": d.get("Numero_Joueur", ""),
-                                "Manche": int(d.get("Manche", 1)),
-                                "Action": d.get("Action", ""),
-                                "Points": int(d.get("Points", 0)),
-                                "RBI": int(d.get("RBI", 0)),
-                                "Vols": int(d.get("Vols", 0))
-                            })
-                        
-                        st.session_state['donnees_ia'] = pd.DataFrame(pour_dataframe)
-                        st.success("✅ Extraction réussie ! Veuillez valider les données ci-dessous.")
-                    except Exception as e:
-                        erreur_str = str(e).lower()
-                        if "429" in erreur_str or "quota" in erreur_str:
-                            st.warning("⏳ Limite de quota atteinte (Erreur 429). L'API gratuite de Google limite le nombre d'analyses à environ 15 par minute. Veuillez patienter une minute avant de réessayer.")
-                        else:
-                            st.error(f"❌ Une erreur inattendue est survenue lors de l'analyse : {e}")
-                        
-        if 'donnees_ia' in st.session_state:
-            st.divider()
-            st.subheader("🧐 Validation et Corrections")
-            st.write("L'IA a fait de son mieux. Veuillez vérifier les joueurs assignés, les manches et les actions, puis corrigez-les au besoin avant l'enregistrement final.")
+        # ==========================================
+        # ONGLET OFFENSIVE
+        # ==========================================
+        with onglet_off_ia:
+            st.write("Analysez les actions au bâton à partir des numéros de dossard.")
+            col_img1, col_img2 = st.columns(2)
+            with col_img1:
+                methode_off = st.radio("Source de l'image :", ["Téléverser un fichier", "Prendre une photo"], key="radio_off")
             
-            df_ia = st.session_state['donnees_ia']
-            
-            options_actions = ["", "1B", "2B", "3B", "CC", "BB", "FA", "SAC", "KE", "KD", "E", "FC", "GO", "FO"]
-            col_config_ia = {
-                "Joueur": st.column_config.SelectboxColumn("Joueur assigné", options=list(dict_joueurs.keys()), required=True),
-                "Numéro détecté (IA)": st.column_config.Column("Numéro lu par l'IA", disabled=True),
-                "Manche": st.column_config.NumberColumn("Manche", min_value=1, max_value=9, step=1, required=True),
-                "Action": st.column_config.SelectboxColumn("Action", options=options_actions),
-                "Points": st.column_config.NumberColumn("Points", min_value=0, step=1),
-                "RBI": st.column_config.NumberColumn("RBI", min_value=0, step=1),
-                "Vols": st.column_config.NumberColumn("Vols", min_value=0, step=1)
-            }
-            
-            df_valide = st.data_editor(df_ia, column_config=col_config_ia, use_container_width=True, num_rows="dynamic", key="editor_ia")
-            
-            if st.button("💾 Enregistrer dans Google Sheets", type="primary", use_container_width=True):
-                with st.spinner("Sauvegarde vers Google Sheets..."):
-                    partie_id_sel = dict_parties[partie_choisie]
-                    prochain_id_p = len(ws_presences.get_all_values())
-                    lignes_a_pousser = []
+            img_file_off = None
+            with col_img2:
+                if methode_off == "Téléverser un fichier":
+                    img_file_off = st.file_uploader("Sélectionnez votre image", type=['png', 'jpg', 'jpeg'], key="file_off")
+                else:
+                    img_file_off = st.camera_input("📸 Prenez la feuille en photo", key="cam_off")
                     
-                    for _, row in df_valide.iterrows():
-                        # Si le coach n'a pas assigné le joueur manuellement, on ignore
-                        if pd.isna(row["Joueur"]) or str(row["Joueur"]).strip() == "":
-                            st.warning(f"⚠️ Action ignorée pour le dossard #{row['Numéro détecté (IA)']} car aucun joueur n'a été assigné dans la première colonne.")
-                            continue
+            if img_file_off is not None:
+                image_off = Image.open(img_file_off)
+                st.image(image_off, caption="Aperçu de la feuille offensive", use_container_width=True)
+                
+                if st.button("Analyser l'offensive avec l'IA", type="primary", use_container_width=True, key="btn_ia_off"):
+                    with st.spinner("Analyse offensive en cours par Gemini... Veuillez patienter..."):
+                        try:
+                            image_off.thumbnail((800, 800))
+                            image_off = image_off.convert('RGB')
                             
-                        j_id = dict_joueurs[row["Joueur"]]
+                            genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+                            model = genai.GenerativeModel('gemini-3.5-flash')
+
+                            prompt_sys_off = """
+                            Tu es un expert en baseball (Baseball Québec).
+                            Analyse attentivement cette feuille de pointage manuscrite et extrais toutes les actions offensives de chaque joueur.
+                            Identifie les joueurs UNIQUEMENT par leur numéro de dossard (chandail), ignore les noms pour des raisons de confidentialité.
+
+                            Retourne uniquement le texte JSON brut, sans inclure de balises de code Markdown comme ```json au début ou ``` à la fin.
+
+                            Le JSON doit être une liste d'objets avec ces clés exactes :
+                            [
+                                {
+                                    "Numero_Joueur": "Numéro du joueur lu",
+                                    "Manche": 1,
+                                    "Action": "1B",
+                                    "Points": 0,
+                                    "RBI": 0,
+                                    "Vols": 0
+                                }
+                            ]
+                            Les valeurs pour la clé "Action" doivent obligatoirement être parmi : 1B, 2B, 3B, CC, KE, KD, FO, GO, SAC, E, FC, BB, FA, ou vide ("").
+                            Déduis le numéro de la "Manche" en fonction des colonnes numérotées du tableau.
+                            S'il y a des points produits (PP/RBI), points marqués (RUN/R) ou buts volés (BV/SB), ajoute-les en nombres entiers.
+                            """
+                            
+                            reponse = model.generate_content([prompt_sys_off, image_off])
+                            
+                            texte_nettoye = reponse.text.replace('```json', '').replace('```', '').strip()
+                            donnees_ia = json.loads(texte_nettoye)
+                            
+                            pour_dataframe = []
+                            for d in donnees_ia:
+                                numero_lu = str(d.get("Numero_Joueur", "")).strip()
+                                if numero_lu.isdigit():
+                                    numero_lu = str(int(numero_lu))
+                                    
+                                joueur_match = None
+                                for k in dict_joueurs.keys():
+                                    if f"(#{numero_lu})" in k:
+                                        joueur_match = k
+                                        break
+                                        
+                                pour_dataframe.append({
+                                    "Joueur": joueur_match,
+                                    "Numéro détecté (IA)": d.get("Numero_Joueur", ""),
+                                    "Manche": int(d.get("Manche", 1)),
+                                    "Action": d.get("Action", ""),
+                                    "Points": int(d.get("Points", 0)),
+                                    "RBI": int(d.get("RBI", 0)),
+                                    "Vols": int(d.get("Vols", 0))
+                                })
+                            
+                            st.session_state['donnees_ia_off'] = pd.DataFrame(pour_dataframe)
+                            st.success("✅ Extraction réussie ! Veuillez valider les données ci-dessous.")
+                        except Exception as e:
+                            erreur_str = str(e).lower()
+                            if "429" in erreur_str or "quota" in erreur_str:
+                                st.warning("⏳ Limite de quota atteinte. Veuillez patienter une minute.")
+                            else:
+                                st.error(f"❌ Une erreur est survenue : {e}")
+                            
+            if 'donnees_ia_off' in st.session_state:
+                st.divider()
+                st.subheader("🧐 Validation Offensive")
+                
+                df_ia_off = st.session_state['donnees_ia_off']
+                options_actions = ["", "1B", "2B", "3B", "CC", "BB", "FA", "SAC", "KE", "KD", "E", "FC", "GO", "FO"]
+                col_config_ia = {
+                    "Joueur": st.column_config.SelectboxColumn("Joueur assigné", options=list(dict_joueurs.keys()), required=True),
+                    "Numéro détecté (IA)": st.column_config.Column("Numéro lu par l'IA", disabled=True),
+                    "Manche": st.column_config.NumberColumn("Manche", min_value=1, max_value=9, step=1, required=True),
+                    "Action": st.column_config.SelectboxColumn("Action", options=options_actions),
+                    "Points": st.column_config.NumberColumn("Points", min_value=0, step=1),
+                    "RBI": st.column_config.NumberColumn("RBI", min_value=0, step=1),
+                    "Vols": st.column_config.NumberColumn("Vols", min_value=0, step=1)
+                }
+                
+                df_valide_off = st.data_editor(df_ia_off, column_config=col_config_ia, use_container_width=True, num_rows="dynamic", key="editor_ia_off")
+                
+                if st.button("💾 Enregistrer l'offensive dans Google Sheets", type="primary", use_container_width=True, key="btn_save_off"):
+                    with st.spinner("Sauvegarde vers Google Sheets..."):
+                        partie_id_sel = dict_parties[partie_choisie]
+                        prochain_id_p = len(ws_presences.get_all_values())
+                        lignes_a_pousser = []
                         
-                        lignes_a_pousser.append([
-                            prochain_id_p,
-                            partie_id_sel,
-                            j_id,
-                            int(row["Manche"]),
-                            str(row["Action"]) if not pd.isna(row["Action"]) else "",
-                            int(row["Points"]) if not pd.isna(row["Points"]) else 0,
-                            int(row["RBI"]) if not pd.isna(row["RBI"]) else 0,
-                            int(row["Vols"]) if not pd.isna(row["Vols"]) else 0
-                        ])
-                        prochain_id_p += 1
+                        for _, row in df_valide_off.iterrows():
+                            if pd.isna(row["Joueur"]) or str(row["Joueur"]).strip() == "":
+                                st.warning(f"⚠️ Action ignorée pour le dossard #{row['Numéro détecté (IA)']} (Aucun joueur).")
+                                continue
+                                
+                            j_id = dict_joueurs[row["Joueur"]]
+                            lignes_a_pousser.append([
+                                prochain_id_p, partie_id_sel, j_id, int(row["Manche"]),
+                                str(row["Action"]) if not pd.isna(row["Action"]) else "",
+                                int(row["Points"]) if not pd.isna(row["Points"]) else 0,
+                                int(row["RBI"]) if not pd.isna(row["RBI"]) else 0,
+                                int(row["Vols"]) if not pd.isna(row["Vols"]) else 0
+                            ])
+                            prochain_id_p += 1
+                            
+                        if lignes_a_pousser:
+                            ws_presences.append_rows(lignes_a_pousser)
+                            del st.session_state['donnees_ia_off']
+                            charger_donnees.clear()
+                            st.success(f"✅ {len(lignes_a_pousser)} présences enregistrées avec succès !")
+                            time.sleep(2)
+                            st.rerun()
+                        else:
+                            st.info("ℹ️ Aucune ligne valide à enregistrer.")
+
+        # ==========================================
+        # ONGLET DÉFENSIVE
+        # ==========================================
+        with onglet_def_ia:
+            st.write("Analysez l'alignement défensif à partir du nom des joueurs.")
+            col_img3, col_img4 = st.columns(2)
+            with col_img3:
+                methode_def = st.radio("Source de l'image :", ["Téléverser un fichier", "Prendre une photo"], key="radio_def")
+            
+            img_file_def = None
+            with col_img4:
+                if methode_def == "Téléverser un fichier":
+                    img_file_def = st.file_uploader("Sélectionnez votre image", type=['png', 'jpg', 'jpeg'], key="file_def")
+                else:
+                    img_file_def = st.camera_input("📸 Prenez la feuille en photo", key="cam_def")
+                    
+            if img_file_def is not None:
+                image_def = Image.open(img_file_def)
+                st.image(image_def, caption="Aperçu de la feuille défensive", use_container_width=True)
+                
+                if st.button("Analyser la défensive avec l'IA", type="primary", use_container_width=True, key="btn_ia_def"):
+                    with st.spinner("Analyse défensive en cours par Gemini... Veuillez patienter..."):
+                        try:
+                            image_def.thumbnail((800, 800))
+                            image_def = image_def.convert('RGB')
+                            
+                            genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+                            model = genai.GenerativeModel('gemini-3.5-flash')
+
+                            prompt_sys_def = """
+                            Tu es un expert en baseball (Baseball Québec).
+                            Analyse attentivement cette feuille d'alignement défensif manuscrite.
+                            Les lignes représentent les noms des joueurs et les colonnes représentent les manches (généralement 1 à 9).
+                            Les cellules contiennent les numéros des positions défensives (ex: 1, 2, 3, 4, 5, 6, 7, 8, 9, DH, B).
+                            
+                            Retourne uniquement le texte JSON brut, sans inclure de balises de code Markdown.
+
+                            Le JSON doit être une liste d'objets où chaque objet représente une position jouée par un joueur lors d'une manche :
+                            [
+                                {
+                                    "Joueur_Lu": "Nom du joueur tel qu'écrit sur la ligne",
+                                    "Manche": 1,
+                                    "Position": "6"
+                                }
+                            ]
+                            Ignore les cases vides. Ne renvoie que les cases où une position est inscrite.
+                            """
+                            
+                            reponse_def = model.generate_content([prompt_sys_def, image_def])
+                            texte_nettoye_def = reponse_def.text.replace('```json', '').replace('```', '').strip()
+                            donnees_ia_def = json.loads(texte_nettoye_def)
+                            
+                            # Préparation des données et matching du nom
+                            pour_dataframe_def = []
+                            for d in donnees_ia_def:
+                                nom_lu = str(d.get("Joueur_Lu", "")).lower()
+                                joueur_match = None
+                                
+                                # On essaie de lier le nom détecté au dictionnaire de l'équipe
+                                for k in dict_joueurs.keys():
+                                    nom_sans_num = k.split("(")[0].strip().lower()
+                                    if nom_sans_num in nom_lu or nom_lu in nom_sans_num:
+                                        joueur_match = k
+                                        break
+                                        
+                                pour_dataframe_def.append({
+                                    "Joueur": joueur_match,
+                                    "Nom détecté (IA)": d.get("Joueur_Lu", ""),
+                                    "Manche": int(d.get("Manche", 1)),
+                                    "Position": str(d.get("Position", "")),
+                                    "PO": 0,
+                                    "A": 0,
+                                    "E": 0
+                                })
+                            
+                            st.session_state['donnees_ia_def'] = pd.DataFrame(pour_dataframe_def)
+                            st.success("✅ Extraction défensive réussie ! Validez les données ci-dessous.")
+                        except Exception as e:
+                            erreur_str = str(e).lower()
+                            if "429" in erreur_str or "quota" in erreur_str:
+                                st.warning("⏳ Limite de quota atteinte. Veuillez patienter une minute.")
+                            else:
+                                st.error(f"❌ Une erreur est survenue : {e}")
+                                
+            if 'donnees_ia_def' in st.session_state:
+                st.divider()
+                st.subheader("🧐 Validation Défensive")
+                
+                df_ia_def = st.session_state['donnees_ia_def']
+                options_pos = ["", "1", "2", "3", "4", "5", "6", "7", "8", "9", "DH", "B"]
+                col_config_ia_def = {
+                    "Joueur": st.column_config.SelectboxColumn("Joueur assigné", options=list(dict_joueurs.keys()), required=True),
+                    "Nom détecté (IA)": st.column_config.Column("Nom lu par l'IA", disabled=True),
+                    "Manche": st.column_config.NumberColumn("Manche", min_value=1, max_value=9, step=1, required=True),
+                    "Position": st.column_config.SelectboxColumn("Position", options=options_pos),
+                    "PO": st.column_config.NumberColumn("Retraits (PO)", min_value=0, step=1),
+                    "A": st.column_config.NumberColumn("Assistances (A)", min_value=0, step=1),
+                    "E": st.column_config.NumberColumn("Erreurs (E)", min_value=0, step=1)
+                }
+                
+                df_valide_def = st.data_editor(df_ia_def, column_config=col_config_ia_def, use_container_width=True, num_rows="dynamic", key="editor_ia_def")
+                
+                if st.button("💾 Enregistrer la défensive dans Google Sheets", type="primary", use_container_width=True, key="btn_save_def"):
+                    with st.spinner("Sauvegarde vers Google Sheets..."):
+                        partie_id_sel = dict_parties[partie_choisie]
+                        prochain_id_def = len(ws_defense.get_all_values())
+                        lignes_a_pousser_def = []
                         
-                    if lignes_a_pousser:
-                        ws_presences.append_rows(lignes_a_pousser)
-                        del st.session_state['donnees_ia']  # On vide la session
-                        charger_donnees.clear()
-                        st.success(f"✅ {len(lignes_a_pousser)} présences enregistrées avec succès pour le match !")
-                        time.sleep(2)
-                        st.rerun()
-                    else:
-                        st.info("ℹ️ Aucune ligne valide à enregistrer.")
+                        for _, row in df_valide_def.iterrows():
+                            if pd.isna(row["Joueur"]) or str(row["Joueur"]).strip() == "":
+                                st.warning(f"⚠️ Position ignorée pour '{row['Nom détecté (IA)']}' (Aucun joueur assigné).")
+                                continue
+                                
+                            j_id = dict_joueurs[row["Joueur"]]
+                            lignes_a_pousser_def.append([
+                                prochain_id_def, partie_id_sel, j_id, int(row["Manche"]),
+                                str(row["Position"]) if not pd.isna(row["Position"]) else "",
+                                int(row["PO"]) if not pd.isna(row["PO"]) else 0,
+                                int(row["A"]) if not pd.isna(row["A"]) else 0,
+                                int(row["E"]) if not pd.isna(row["E"]) else 0
+                            ])
+                            prochain_id_def += 1
+                            
+                        if lignes_a_pousser_def:
+                            ws_defense.append_rows(lignes_a_pousser_def)
+                            del st.session_state['donnees_ia_def']
+                            charger_donnees.clear()
+                            st.success(f"✅ {len(lignes_a_pousser_def)} positions enregistrées avec succès !")
+                            time.sleep(2)
+                            st.rerun()
+                        else:
+                            st.info("ℹ️ Aucune ligne valide à enregistrer.")
 
 # --- PAGE 3 : GESTION (AJOUT DE JOUEURS ET MATCHS) ---
 elif choix_menu == "⚙️ Gestion":
