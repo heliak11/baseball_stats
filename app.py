@@ -24,6 +24,16 @@ def init_connection():
     w_p = sheet.worksheet("parties")
     w_pres = sheet.worksheet("presences")
     
+    # Vérification et correction automatique des en-têtes pour 'parties' (ex: ajout de 'verrouille' manquant)
+    headers_p = w_p.row_values(1)
+    expected_headers = ["id", "date_match", "equipe_adverse", "lieu", "type_match", "resultat", "pointage", "verrouille"]
+    cells_to_update = []
+    for i, expected_header in enumerate(expected_headers):
+        if i >= len(headers_p) or str(headers_p[i]).strip().lower() != expected_header:
+            cells_to_update.append(gspread.Cell(1, i + 1, expected_header))
+    if cells_to_update:
+        w_p.update_cells(cells_to_update)
+        
     try:
         w_def = sheet.worksheet("defense")
     except gspread.WorksheetNotFound:
@@ -47,7 +57,17 @@ def charger_donnees():
             return pd.DataFrame() # Retourne un DataFrame vide si la feuille est vide
         headers = all_values[0]
         data = all_values[1:]
-        return pd.DataFrame(data, columns=headers)
+        
+        # S'assurer que toutes les lignes de données ont exactement la même longueur que les en-têtes
+        cleaned_data = []
+        for row in data:
+            if len(row) < len(headers):
+                row.extend([""] * (len(headers) - len(row)))
+            elif len(row) > len(headers):
+                row = row[:len(headers)]
+            cleaned_data.append(row)
+            
+        return pd.DataFrame(cleaned_data, columns=headers)
 
     df_j = safe_load_sheet(ws_joueurs)
     df_p = safe_load_sheet(ws_parties)
@@ -428,6 +448,14 @@ elif choix_menu == "⚾ Grille de Match":
         
         partie_id_selectionnee = dict_parties[partie_grille]
         
+        match_selectionne = parties_df[parties_df['id'].astype(str) == str(partie_id_selectionnee)]
+        est_verrouille = False
+        if not match_selectionne.empty:
+            est_verrouille = str(match_selectionne.iloc[0].get('verrouille', 'Non')).strip().lower() == 'oui'
+            
+        if est_verrouille:
+            st.warning("🔒 Ce match est verrouillé. Vous pouvez consulter les données, mais aucune modification ne peut être enregistrée.")
+        
         onglet_off, onglet_def = st.tabs(["🏏 Offensive", "🧤 Défensive"])
         
         with onglet_off:
@@ -486,10 +514,10 @@ elif choix_menu == "⚾ Grille de Match":
             col_config["Vols"] = st.column_config.NumberColumn(label="BV (Vols)", min_value=0, step=1, width="small")
 
             # 4. Afficher la grille éditable
-            grille_editee = st.data_editor(df_grille, column_config=col_config, hide_index=True, use_container_width=True, key="grille_off")
+            grille_editee = st.data_editor(df_grille, column_config=col_config, hide_index=True, use_container_width=True, key="grille_off", disabled=est_verrouille)
             
             # 5. Bouton de sauvegarde de masse
-            if st.button("💾 Enregistrer l'offensive", type="primary", use_container_width=True):
+            if st.button("💾 Enregistrer l'offensive", type="primary", use_container_width=True, disabled=est_verrouille):
                 with st.spinner("💾 Synchronisation de l'offensive..."):
                     prochain_id = len(ws_presences.get_all_values())
                     lignes_a_ajouter = []
@@ -627,9 +655,9 @@ elif choix_menu == "⚾ Grille de Match":
             col_config_def["A"] = st.column_config.NumberColumn(label="Assistances (A)", min_value=0, step=1, width="small")
             col_config_def["E"] = st.column_config.NumberColumn(label="Erreurs (E)", min_value=0, step=1, width="small")
             
-            grille_editee_def = st.data_editor(df_grille_def, column_config=col_config_def, hide_index=True, use_container_width=True, key="grille_def")
+            grille_editee_def = st.data_editor(df_grille_def, column_config=col_config_def, hide_index=True, use_container_width=True, key="grille_def", disabled=est_verrouille)
             
-            if st.button("💾 Enregistrer la défensive", type="primary", use_container_width=True):
+            if st.button("💾 Enregistrer la défensive", type="primary", use_container_width=True, disabled=est_verrouille):
                 with st.spinner("💾 Synchronisation de la grille défensive..."):
                     prochain_id_def = len(ws_defense.get_all_values())
                     lignes_a_ajouter_def = []
@@ -733,6 +761,15 @@ elif choix_menu == "📸 Analyse IA":
     else:
         partie_choisie = st.selectbox("Associer ces statistiques à quel match ?", list(dict_parties.keys()), key="select_match_ia")
         
+        partie_id_ia = dict_parties[partie_choisie]
+        match_selectionne_ia = parties_df[parties_df['id'].astype(str) == str(partie_id_ia)]
+        est_verrouille_ia = False
+        if not match_selectionne_ia.empty:
+            est_verrouille_ia = str(match_selectionne_ia.iloc[0].get('verrouille', 'Non')).strip().lower() == 'oui'
+            
+        if est_verrouille_ia:
+            st.warning("🔒 Ce match est verrouillé. Vous ne pouvez pas y importer de nouvelles données via l'IA.")
+            
         onglet_off_ia, onglet_def_ia = st.tabs(["🏏 Offensive", "🧤 Défensive"])
 
         # ==========================================
@@ -839,9 +876,9 @@ elif choix_menu == "📸 Analyse IA":
                     "Vols": st.column_config.NumberColumn("Vols", min_value=0, step=1)
                 }
                 
-                df_valide_off = st.data_editor(df_ia_off, column_config=col_config_ia, use_container_width=True, num_rows="dynamic", key="editor_ia_off")
+                df_valide_off = st.data_editor(df_ia_off, column_config=col_config_ia, use_container_width=True, num_rows="dynamic", key="editor_ia_off", disabled=est_verrouille_ia)
                 
-                if st.button("💾 Enregistrer l'offensive dans Google Sheets", type="primary", use_container_width=True, key="btn_save_off"):
+                if st.button("💾 Enregistrer l'offensive dans Google Sheets", type="primary", use_container_width=True, key="btn_save_off", disabled=est_verrouille_ia):
                     with st.spinner("Sauvegarde vers Google Sheets..."):
                         partie_id_sel = dict_parties[partie_choisie]
                         prochain_id_p = len(ws_presences.get_all_values())
@@ -972,9 +1009,9 @@ elif choix_menu == "📸 Analyse IA":
                     "E": st.column_config.NumberColumn("Erreurs (E)", min_value=0, step=1)
                 }
                 
-                df_valide_def = st.data_editor(df_ia_def, column_config=col_config_ia_def, use_container_width=True, num_rows="dynamic", key="editor_ia_def")
+                df_valide_def = st.data_editor(df_ia_def, column_config=col_config_ia_def, use_container_width=True, num_rows="dynamic", key="editor_ia_def", disabled=est_verrouille_ia)
                 
-                if st.button("💾 Enregistrer la défensive dans Google Sheets", type="primary", use_container_width=True, key="btn_save_def"):
+                if st.button("💾 Enregistrer la défensive dans Google Sheets", type="primary", use_container_width=True, key="btn_save_def", disabled=est_verrouille_ia):
                     with st.spinner("Sauvegarde vers Google Sheets..."):
                         partie_id_sel = dict_parties[partie_choisie]
                         prochain_id_def = len(ws_defense.get_all_values())
