@@ -1137,7 +1137,7 @@ elif choix_menu == "⚙️ Gestion":
                             nouvel_id_num = int(max_id_num) + 1
                             nouvel_id_p = f"P{nouvel_id_num}"
 
-                            ws_parties.append_row([nouvel_id_p, date_match.strftime("%Y-%m-%d"), equipe_adverse.strip(), lieu.strip(), type_match, resultat, pointage.strip()])
+                            ws_parties.append_row([nouvel_id_p, date_match.strftime("%Y-%m-%d"), equipe_adverse.strip(), lieu.strip(), type_match, resultat, pointage.strip(), "Non"])
                             
                         charger_donnees.clear()
                         st.success(f"✅ Match contre {equipe_adverse} créé !")
@@ -1170,6 +1170,8 @@ elif choix_menu == "⚙️ Gestion":
                 
                 current_pointage = str(m_row.get('pointage', ''))
                 if current_pointage == 'nan': current_pointage = ''
+                
+                current_verrouille = str(m_row.get('verrouille', 'Non'))
 
                 with st.form("form_modif_match"):
                     nouvelle_date = st.date_input("Date du match", value=current_date)
@@ -1182,6 +1184,8 @@ elif choix_menu == "⚙️ Gestion":
                         nouveau_resultat = st.selectbox("Résultat", resultats_possibles, index=res_index)
                     with col_r2:
                         nouveau_pointage = st.text_input("Pointage (ex: 5-3)", value=current_pointage)
+                        
+                    est_verrouille = st.checkbox("🔒 Verrouiller le match (empêche la saisie et modification)", value=(current_verrouille == 'Oui'))
 
                     soumis_modif_m = st.form_submit_button("Enregistrer les modifications", type="primary", use_container_width=True)
                     
@@ -1197,6 +1201,7 @@ elif choix_menu == "⚙️ Gestion":
                                 ws_parties.update_cell(row_idx, 5, nouveau_type)
                                 ws_parties.update_cell(row_idx, 6, nouveau_resultat)
                                 ws_parties.update_cell(row_idx, 7, nouveau_pointage.strip())
+                                ws_parties.update_cell(row_idx, 8, "Oui" if est_verrouille else "Non")
                                 
                             charger_donnees.clear()
                             st.success(f"✅ Match modifié avec succès !")
@@ -1287,6 +1292,7 @@ elif choix_menu == "⚙️ Gestion":
                     nouvelles_presences = []
                     erreurs_joueurs = set()
                     erreurs_parties = set()
+                    erreurs_verrouilles = set()
                     lignes_valides = []
                     
                     colonnes_actions = {
@@ -1327,17 +1333,22 @@ elif choix_menu == "⚙️ Gestion":
                             erreurs_parties.add(nom_partie_brut)
                             
                         if joueur_id and partie_id:
-                            lignes_valides.append((joueur_id, partie_id, row))
+                            m_row_csv = parties_df[parties_df['id'] == partie_id].iloc[0]
+                            if str(m_row_csv.get('verrouille', 'Non')) == 'Oui':
+                                erreurs_verrouilles.add(nom_partie_brut)
+                            else:
+                                lignes_valides.append((joueur_id, partie_id, row))
 
-                    if erreurs_joueurs or erreurs_parties:
+                    if erreurs_joueurs or erreurs_parties or erreurs_verrouilles:
                         if erreurs_joueurs:
                             st.error(f"❌ Joueurs introuvables : {', '.join(erreurs_joueurs)}")
                             st.info("💡 L'application ne crée plus de joueurs automatiquement. Veuillez d'abord les ajouter dans l'onglet 'Ajouter' ou vérifier l'orthographe dans votre fichier CSV (ex: 'R Gagnon' ou 'René Gagnon').")
-                            st.info("💡 Vérifiez l'orthographe dans le CSV (ex: 'R Gagnon', 'L-K Comtois') ou ajoutez-les dans l'onglet 'Ajouter'.")
                         if erreurs_parties:
                             st.error(f"❌ Matchs introuvables : {', '.join(erreurs_parties)}")
                             st.info("💡 L'application ne crée plus de matchs automatiquement. Veuillez d'abord les ajouter dans l'onglet 'Ajouter' et utiliser leur ID (ex: 'P2') ou l'équipe adverse.")
-                            st.info("💡 Veuillez utiliser l'ID du match (ex: 'P2') ou l'équipe adverse.")
+                        if erreurs_verrouilles:
+                            st.error(f"🔒 Matchs verrouillés (ignorés) : {', '.join(erreurs_verrouilles)}")
+                            st.info("💡 Ces matchs sont verrouillés. Allez dans l'onglet 'Gestion' pour les déverrouiller si vous souhaitez y importer de nouvelles données.")
                         st.stop()
                         
                     nouvelles_presences = []
